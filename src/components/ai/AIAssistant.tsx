@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { useAI } from "@/contexts/AIContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,6 @@ import {
     Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { C1Component } from "@thesysai/genui-sdk";
 
 const AIAssistant = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -120,12 +120,7 @@ const AIAssistant = () => {
                                         : "bg-secondary text-secondary-foreground rounded-tl-none border border-border"
                                 )}
                             >
-                                {/* Check if it's a Thesys DSL and render C1Component if so */}
-                                {m.content.includes("```thesys") || m.content.includes("{\"c1\":") ? (
-                                    <C1Component c1Response={m.content} isStreaming={false} />
-                                ) : (
-                                    m.content
-                                )}
+                                <ReactMarkdown>{m.content}</ReactMarkdown>
                             </div>
                         </div>
                     ))}

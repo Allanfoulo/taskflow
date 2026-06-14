@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import {
   Card,
   CardContent,
@@ -16,6 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Bell,
   Moon,
   Sun,
@@ -26,9 +34,69 @@ import {
 } from "lucide-react";
 import { CollaborationSettings } from "@/components/collaboration";
 
+const LANGUAGE_OPTIONS = [
+  "English",
+  "Spanish",
+  "French",
+  "German",
+  "Portuguese",
+  "Arabic",
+  "Hindi",
+  "Japanese",
+  "Mandarin Chinese",
+] as const;
+
+const TIMEZONE_OPTIONS = [
+  "Pacific Time (UTC-8 / UTC-7)",
+  "Mountain Time (UTC-7 / UTC-6)",
+  "Central Time (UTC-6 / UTC-5)",
+  "Eastern Time (UTC-5 / UTC-4)",
+  "Greenwich Mean Time (UTC+0)",
+  "Central European Time (UTC+1 / UTC+2)",
+  "South Africa Standard Time (UTC+2)",
+  "India Standard Time (UTC+5:30)",
+  "Singapore Time (UTC+8)",
+  "Japan Standard Time (UTC+9)",
+  "Australian Eastern Time (UTC+10 / UTC+11)",
+] as const;
+
+const DATE_FORMAT_OPTIONS = [
+  "MM/DD/YYYY",
+  "DD/MM/YYYY",
+  "YYYY-MM-DD",
+  "MMM D, YYYY",
+] as const;
+
+const TIME_FORMAT_OPTIONS = [
+  "12-hour",
+  "24-hour",
+] as const;
+
+const DEFAULT_ACCOUNT_SETTINGS = {
+  language: "English",
+  timezone: "Pacific Time (UTC-8 / UTC-7)",
+  dateFormat: "MM/DD/YYYY",
+  timeFormat: "12-hour",
+} as const;
+
+type AccountSettings = {
+  language: string;
+  timezone: string;
+  dateFormat: string;
+  timeFormat: string;
+};
+
+const getValidOption = <T extends readonly string[]>(
+  options: T,
+  value: string | undefined,
+  fallback: T[number],
+): T[number] => (value && options.includes(value as T[number]) ? (value as T[number]) : fallback);
+
 const Settings = () => {
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
+  const profile = useQuery(api.profiles.current);
+  const updatePreferences = useMutation(api.profiles.updatePreferences);
 
   const [notificationSettings, setNotificationSettings] = useState({
     emailNotifications: true,
@@ -38,66 +106,53 @@ const Settings = () => {
     taskReminders: true,
   });
 
-  const [accountSettings, setAccountSettings] = useState({
-    language: "English",
-    timezone: "Pacific Time (UTC-7)",
-    dateFormat: "MM/DD/YYYY",
-    timeFormat: "12-hour",
+  const [accountSettings, setAccountSettings] = useState<AccountSettings>({
+    ...DEFAULT_ACCOUNT_SETTINGS,
   });
 
   const [activeTab, setActiveTab] = useState("account");
 
   // Fetch preferences on mount
   useEffect(() => {
-    const fetchPreferences = async () => {
-      if (!user) return;
+    if (!user || !profile?.preferences) return;
 
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('preferences')
-          .eq('id', user.id)
-          .single();
-
-        if (error) throw error;
-
-        if (data?.preferences) {
-          const prefs = data.preferences;
-          if (prefs.account) setAccountSettings(prev => ({ ...prev, ...prefs.account }));
-          if (prefs.notifications) setNotificationSettings(prev => ({ ...prev, ...prefs.notifications }));
-        }
-      } catch (error) {
-        console.error("Error fetching preferences:", error);
-      }
-    };
-
-    fetchPreferences();
-  }, [user]);
+    const prefs = profile.preferences;
+    if (prefs.account) {
+      setAccountSettings({
+        language: getValidOption(
+          LANGUAGE_OPTIONS,
+          prefs.account.language,
+          DEFAULT_ACCOUNT_SETTINGS.language,
+        ),
+        timezone: getValidOption(
+          TIMEZONE_OPTIONS,
+          prefs.account.timezone,
+          DEFAULT_ACCOUNT_SETTINGS.timezone,
+        ),
+        dateFormat: getValidOption(
+          DATE_FORMAT_OPTIONS,
+          prefs.account.dateFormat,
+          DEFAULT_ACCOUNT_SETTINGS.dateFormat,
+        ),
+        timeFormat: getValidOption(
+          TIME_FORMAT_OPTIONS,
+          prefs.account.timeFormat,
+          DEFAULT_ACCOUNT_SETTINGS.timeFormat,
+        ),
+      });
+    }
+    if (prefs.notifications) setNotificationSettings(prev => ({ ...prev, ...prefs.notifications }));
+  }, [profile?.preferences, user]);
 
   const savePreferences = async (type: 'account' | 'notifications', newData: any) => {
     if (!user) return;
 
     try {
-      // First get current preferences to merge
-      const { data: currentData } = await supabase
-        .from('profiles')
-        .select('preferences')
-        .eq('id', user.id)
-        .single();
-
-      const currentPrefs = currentData?.preferences || {};
-
-      const updatedPrefs = {
-        ...currentPrefs,
-        [type]: newData
-      };
-
-      const { error } = await supabase
-        .from('profiles')
-        .update({ preferences: updatedPrefs })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      await updatePreferences(
+        type === "account"
+          ? { account: newData }
+          : { notifications: newData },
+      );
 
       if (type === 'account') {
         toast.success("Account settings saved successfully");
@@ -188,39 +243,78 @@ const Settings = () => {
                   <Label htmlFor="language">Language</Label>
                   <div className="relative">
                     <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="language"
-                      className="pl-10"
+                    <Select
                       value={accountSettings.language}
-                      onChange={(e) => setAccountSettings({ ...accountSettings, language: e.target.value })}
-                    />
+                      onValueChange={(value) => setAccountSettings({ ...accountSettings, language: value })}
+                    >
+                      <SelectTrigger id="language" className="pl-10">
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Timezone</Label>
-                  <Input
-                    id="timezone"
+                  <Select
                     value={accountSettings.timezone}
-                    onChange={(e) => setAccountSettings({ ...accountSettings, timezone: e.target.value })}
-                  />
+                    onValueChange={(value) => setAccountSettings({ ...accountSettings, timezone: value })}
+                  >
+                    <SelectTrigger id="timezone">
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="dateFormat">Date Format</Label>
-                  <Input
-                    id="dateFormat"
+                  <Select
                     value={accountSettings.dateFormat}
-                    onChange={(e) => setAccountSettings({ ...accountSettings, dateFormat: e.target.value })}
-                  />
+                    onValueChange={(value) => setAccountSettings({ ...accountSettings, dateFormat: value })}
+                  >
+                    <SelectTrigger id="dateFormat">
+                      <SelectValue placeholder="Select date format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DATE_FORMAT_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timeFormat">Time Format</Label>
-                  <Input
-                    id="timeFormat"
+                  <Select
                     value={accountSettings.timeFormat}
-                    onChange={(e) => setAccountSettings({ ...accountSettings, timeFormat: e.target.value })}
-                  />
+                    onValueChange={(value) => setAccountSettings({ ...accountSettings, timeFormat: value })}
+                  >
+                    <SelectTrigger id="timeFormat">
+                      <SelectValue placeholder="Select time format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_FORMAT_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>

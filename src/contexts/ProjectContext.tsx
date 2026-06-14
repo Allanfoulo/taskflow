@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
+import { useMutation, useQuery } from "convex/react";
+import { Id } from "../../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
@@ -26,6 +28,10 @@ export type Milestone = {
   title: string;
   date: string;
   completed: boolean;
+};
+
+type MilestoneInput = Partial<Milestone> & {
+  projectId?: string;
 };
 
 export type Task = {
@@ -78,9 +84,10 @@ interface ProjectContextType {
   updateTask: (id: string, task: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
-  addMilestone: (milestone: Partial<Milestone>) => Promise<void>;
+  addMilestone: (milestone: MilestoneInput) => Promise<void>;
   updateMilestone: (id: string, milestone: Partial<Milestone>) => Promise<void>;
   deleteMilestone: (id: string) => Promise<void>;
+  addWorkspace: (workspace: Partial<Workspace>) => Promise<void>;
   activities: Activity[];
   logActivity: (activity: Partial<Activity>) => Promise<void>;
   isLoading: boolean;
@@ -90,148 +97,70 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [requestedDefaultWorkspace, setRequestedDefaultWorkspace] = useState(false);
+  const workspaceRecords = useQuery(api.workspaces.list);
+  const projectRecords = useQuery(api.projects.list);
+  const activityRecords = useQuery(api.activities.list);
+  const ensureDefaultWorkspace = useMutation(api.workspaces.ensureDefault);
+  const createWorkspace = useMutation(api.workspaces.create);
+  const createProject = useMutation(api.projects.create);
+  const patchProject = useMutation(api.projects.update);
+  const removeProject = useMutation(api.projects.remove);
+  const createTask = useMutation(api.tasks.create);
+  const patchTask = useMutation(api.tasks.update);
+  const removeTask = useMutation(api.tasks.remove);
+  const createActivity = useMutation(api.activities.log);
+
+  const workspaces = (workspaceRecords || []).map((workspace) => ({
+    id: String(workspace.id),
+    name: workspace.name,
+    color: workspace.color,
+  }));
+
+  const projects = (projectRecords || []).map((project) => ({
+    ...project,
+    id: String(project.id),
+    workspace: String(project.workspace),
+    tasks: project.tasks.map((task) => ({
+      ...task,
+      id: String(task.id),
+      assigneeId: task.assigneeId ? String(task.assigneeId) : undefined,
+      projectId: String(task.projectId),
+    })),
+  }));
+
+  const activities = (activityRecords || []).map((activity) => ({
+    ...activity,
+    id: String(activity.id),
+    userId: String(activity.userId),
+  }));
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    } else {
-      setProjects([]);
-      setWorkspaces([]);
-      setActivities([]);
-      setIsLoading(false);
+    if (!user) {
+      setRequestedDefaultWorkspace(false);
+      return;
     }
-  }, [user]);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch workspaces
-      const { data: workspacesData, error: workspacesError } = await supabase
-        .from('workspaces')
-        .select('*');
-
-      if (workspacesError) throw workspacesError;
-
-      let userWorkspaces = workspacesData || [];
-
-      // Create default workspace if none exists
-      if (user && (!workspacesData || workspacesData.length === 0)) {
-        const { data: newWorkspace, error: createError } = await supabase
-          .from('workspaces')
-          .insert([{
-            name: `${user.name}'s Workspace`,
-            owner_id: user.id,
-            color: '#4f46e5'
-          }])
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        if (newWorkspace) {
-          userWorkspaces = [newWorkspace];
-        }
-      }
-
-      setWorkspaces(userWorkspaces);
-
-      // Fetch projects with tasks
-      const { data: projectsData, error: projectsError } = await supabase
-        .from('projects')
-        .select('*, tasks(*)');
-
-      if (projectsError) throw projectsError;
-
-      // Map to Project type
-      const mappedProjects: Project[] = (projectsData || []).map(p => ({
-        id: p.id,
-        name: p.name,
-        description: p.description || "",
-        createdAt: p.created_at,
-        dueDate: p.due_date,
-        status: (p.status as "active" | "completed" | "onHold") || "active",
-        progress: p.progress || 0,
-        members: p.members || [],
-        workspace: p.workspace_id,
-        favorite: p.favorite || false,
-        color: p.color || "#4f46e5",
-        tags: p.tags || [],
-        milestones: p.milestones || [],
-        tasks: (p.tasks || []).map((t: any) => ({
-          id: t.id,
-          title: t.title,
-          description: t.description || "",
-          status: (t.status as "backlog" | "todo" | "inProgress" | "inReview" | "done") || "todo",
-          priority: (t.priority as "low" | "medium" | "high" | "urgent") || "medium",
-          assigneeId: t.assignee_id,
-          dueDate: t.due_date,
-          createdAt: t.created_at,
-          tags: t.tags || [],
-          subtasks: t.subtasks || [],
-          projectId: t.project_id
-        }))
-      }));
-
-      setProjects(mappedProjects);
-
-      // Fetch activities
-      await fetchActivities();
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast.error("Failed to load projects");
-    } finally {
-      setIsLoading(false);
+    if (workspaceRecords && workspaceRecords.length === 0 && !requestedDefaultWorkspace) {
+      setRequestedDefaultWorkspace(true);
+      void ensureDefaultWorkspace({});
     }
-  };
+  }, [ensureDefaultWorkspace, requestedDefaultWorkspace, user, workspaceRecords]);
 
-  const fetchActivities = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('activities')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
-
-      const mappedActivities: Activity[] = (data || []).map(a => ({
-        id: a.id,
-        userId: a.user_id,
-        action: a.action,
-        entityType: a.entity_type,
-        entityId: a.entity_id,
-        entityName: a.entity_name,
-        metadata: a.metadata || {},
-        createdAt: a.created_at
-      }));
-
-      setActivities(mappedActivities);
-    } catch (error) {
-      console.error("Error fetching activities:", error);
-    }
-  };
+  const isLoading = !!user && (workspaceRecords === undefined || projectRecords === undefined || activityRecords === undefined);
 
   const logActivity = async (activity: Partial<Activity>) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('activities')
-        .insert([{
-          user_id: user.id,
-          action: activity.action,
-          entity_type: activity.entityType,
-          entity_id: activity.entityId,
-          entity_name: activity.entityName,
-          metadata: activity.metadata || {}
-        }]);
-
-      if (error) throw error;
-      await fetchActivities();
+      await createActivity({
+        action: activity.action || "updated",
+        entityType: activity.entityType || "unknown",
+        entityId: activity.entityId || "",
+        entityName: activity.entityName,
+        metadata: activity.metadata,
+      });
     } catch (error) {
       console.error("Error logging activity:", error);
     }
@@ -241,54 +170,32 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
 
     try {
-      const newProjectData = {
+      const workspaceId = (project.workspace || workspaces[0]?.id) as Id<"workspaces"> | undefined;
+      if (!workspaceId) {
+        throw new Error("Workspace is required");
+      }
+
+      const createdProjectId = await createProject({
         name: project.name || "New Project",
         description: project.description || "",
         status: project.status || "active",
-        workspace_id: project.workspace || workspaces[0]?.id, // Use first available workspace
+        workspaceId,
         color: project.color || "#4f46e5",
         tags: project.tags || [],
         members: project.members || [],
-        milestones: project.milestones || [], // JSONB
-        owner_id: user.id,
+        milestones: project.milestones || [],
         favorite: project.favorite || false,
-        progress: project.progress || 0
-      };
+        progress: project.progress || 0,
+        dueDate: project.dueDate,
+      });
 
-      const { data, error } = await supabase
-        .from('projects')
-        .insert([newProjectData])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        const newProject: Project = {
-          id: data.id,
-          name: data.name,
-          description: data.description || "",
-          createdAt: data.created_at,
-          dueDate: data.due_date,
-          status: data.status,
-          progress: data.progress,
-          members: data.members || [],
-          workspace: data.workspace_id,
-          favorite: data.favorite,
-          color: data.color,
-          tags: data.tags || [],
-          milestones: data.milestones || [],
-          tasks: []
-        };
-        setProjects([...projects, newProject]);
-        await logActivity({
-          action: "created",
-          entityType: "project",
-          entityId: data.id,
-          entityName: data.name
-        });
-        toast.success("Project created successfully");
-      }
+      await logActivity({
+        action: "created",
+        entityType: "project",
+        entityId: String(createdProjectId),
+        entityName: project.name || "New Project",
+      });
+      toast.success("Project created successfully");
     } catch (error) {
       console.error("Error creating project:", error);
       toast.error("Failed to create project");
@@ -297,34 +204,20 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const updateProject = async (id: string, updatedFields: Partial<Project>) => {
     try {
-      // Map generic fields to database fields
-      const dbUpdates: any = {};
-      if (updatedFields.name !== undefined) dbUpdates.name = updatedFields.name;
-      if (updatedFields.description !== undefined) dbUpdates.description = updatedFields.description;
-      if (updatedFields.status !== undefined) dbUpdates.status = updatedFields.status;
-      if (updatedFields.dueDate !== undefined) dbUpdates.due_date = updatedFields.dueDate;
-      if (updatedFields.favorite !== undefined) dbUpdates.favorite = updatedFields.favorite;
-      if (updatedFields.color !== undefined) dbUpdates.color = updatedFields.color;
-      if (updatedFields.progress !== undefined) dbUpdates.progress = updatedFields.progress;
-      if (updatedFields.tags !== undefined) dbUpdates.tags = updatedFields.tags;
-      if (updatedFields.members !== undefined) dbUpdates.members = updatedFields.members;
-      // milestones specific update is handled separately, but general update could rewrite it
-      if (updatedFields.milestones !== undefined) dbUpdates.milestones = updatedFields.milestones;
+      await patchProject({
+        id: id as Id<"projects">,
+        name: updatedFields.name,
+        description: updatedFields.description,
+        status: updatedFields.status,
+        dueDate: updatedFields.dueDate,
+        favorite: updatedFields.favorite,
+        color: updatedFields.color,
+        progress: updatedFields.progress,
+        tags: updatedFields.tags,
+        members: updatedFields.members,
+        milestones: updatedFields.milestones,
+      });
 
-      const { error } = await supabase
-        .from('projects')
-        .update(dbUpdates)
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setProjects(
-        projects.map((project) =>
-          project.id === id ? { ...project, ...updatedFields } : project
-        )
-      );
-
-      // Also update current project if it's the one being edited
       if (currentProject && currentProject.id === id) {
         setCurrentProject({ ...currentProject, ...updatedFields });
       }
@@ -345,14 +238,10 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteProject = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', id);
+      await removeProject({
+        id: id as Id<"projects">,
+      });
 
-      if (error) throw error;
-
-      setProjects(projects.filter((project) => project.id !== id));
       if (currentProject?.id === id) {
         setCurrentProject(null);
       }
@@ -375,63 +264,27 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     if (!task.projectId || !user) return;
 
     try {
-      const newTaskData = {
-        project_id: task.projectId,
+      const createdTaskId = await createTask({
+        projectId: task.projectId as Id<"projects">,
         title: task.title || "New Task",
         description: task.description || "",
         status: task.status || "todo",
         priority: task.priority || "medium",
-        assignee_id: task.assigneeId || user.id, // Assign to self by default
-        due_date: task.dueDate,
+        assigneeId: (task.assigneeId || user.id) as Id<"users">,
         tags: task.tags || [],
-        subtasks: task.subtasks || [] // JSONB
-      };
+        subtasks: task.subtasks || [],
+        dueDate: task.dueDate,
+      });
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert([newTaskData])
-        .select()
-        .single();
+      await logActivity({
+        action: "added task",
+        entityType: "task",
+        entityId: String(createdTaskId),
+        entityName: task.title || "New Task",
+        metadata: { projectId: task.projectId },
+      });
 
-      if (error) throw error;
-
-      if (data) {
-        const newTask: Task = {
-          id: data.id,
-          title: data.title,
-          description: data.description || "",
-          status: data.status,
-          priority: data.priority,
-          assigneeId: data.assignee_id,
-          dueDate: data.due_date,
-          createdAt: data.created_at,
-          tags: data.tags || [],
-          subtasks: data.subtasks || [],
-          projectId: data.project_id
-        };
-
-        setProjects(
-          projects.map((project) => {
-            if (project.id === task.projectId) {
-              return {
-                ...project,
-                tasks: [...project.tasks, newTask],
-              };
-            }
-            return project;
-          })
-        );
-
-        await logActivity({
-          action: "added task",
-          entityType: "task",
-          entityId: data.id,
-          entityName: data.title,
-          metadata: { projectId: data.project_id }
-        });
-
-        toast.success("Task added");
-      }
+      toast.success("Task added");
     } catch (error) {
       console.error("Error adding task:", error);
       toast.error("Failed to add task");
@@ -440,34 +293,17 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const updateTask = async (id: string, updatedFields: Partial<Task>) => {
     try {
-      const dbUpdates: any = {};
-      if (updatedFields.title !== undefined) dbUpdates.title = updatedFields.title;
-      if (updatedFields.description !== undefined) dbUpdates.description = updatedFields.description;
-      if (updatedFields.status !== undefined) dbUpdates.status = updatedFields.status;
-      if (updatedFields.priority !== undefined) dbUpdates.priority = updatedFields.priority;
-      if (updatedFields.dueDate !== undefined) dbUpdates.due_date = updatedFields.dueDate;
-      if (updatedFields.assigneeId !== undefined) dbUpdates.assignee_id = updatedFields.assigneeId;
-      if (updatedFields.tags !== undefined) dbUpdates.tags = updatedFields.tags;
-      if (updatedFields.subtasks !== undefined) dbUpdates.subtasks = updatedFields.subtasks;
-
-      const { error } = await supabase
-        .from('tasks')
-        .update(dbUpdates)
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setProjects(
-        projects.map((project) => {
-          const updatedTasks = project.tasks.map((task) =>
-            task.id === id ? { ...task, ...updatedFields } : task
-          );
-          return {
-            ...project,
-            tasks: updatedTasks,
-          };
-        })
-      );
+      await patchTask({
+        id: id as Id<"tasks">,
+        title: updatedFields.title,
+        description: updatedFields.description,
+        status: updatedFields.status,
+        priority: updatedFields.priority,
+        dueDate: updatedFields.dueDate,
+        assigneeId: updatedFields.assigneeId as Id<"users"> | undefined,
+        tags: updatedFields.tags,
+        subtasks: updatedFields.subtasks,
+      });
 
       await logActivity({
         action: updatedFields.status === "done" ? "completed task" : "updated task",
@@ -483,19 +319,9 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
 
   const deleteTask = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setProjects(
-        projects.map((project) => ({
-          ...project,
-          tasks: project.tasks.filter((task) => task.id !== id),
-        }))
-      );
+      await removeTask({
+        id: id as Id<"tasks">,
+      });
 
       await logActivity({
         action: "deleted task",
@@ -518,7 +344,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Milestones are stored in projects table as JSONB, so we update the project
-  const addMilestone = async (milestone: Partial<Milestone>) => {
+  const addMilestone = async (milestone: MilestoneInput) => {
     if (!milestone.projectId) return;
 
     const project = projects.find(p => p.id === milestone.projectId);
@@ -555,6 +381,18 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     await updateProject(project.id, { milestones: updatedMilestones });
   };
 
+  const addWorkspace = async (workspace: Partial<Workspace>) => {
+    try {
+      await createWorkspace({
+        name: workspace.name || "New Workspace",
+        color: workspace.color || "#4f46e5",
+      });
+    } catch (error) {
+      console.error("Error creating workspace:", error);
+      toast.error("Failed to create workspace");
+    }
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -572,6 +410,7 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         addMilestone,
         updateMilestone,
         deleteMilestone,
+        addWorkspace,
         activities,
         logActivity,
         isLoading,

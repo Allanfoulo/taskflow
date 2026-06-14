@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjects } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { v4 as uuidv4 } from "uuid";
 
 interface CreateProjectModalProps {
   trigger?: React.ReactNode;
@@ -42,6 +41,7 @@ const CreateProjectModal = ({
 }: CreateProjectModalProps) => {
   const { addProject, workspaces } = useProjects();
   const [open, setOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -49,37 +49,57 @@ const CreateProjectModal = ({
     dueDate: null as Date | null,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (!formData.workspace && workspaces.length > 0) {
+      setFormData((current) => ({
+        ...current,
+        workspace: workspaces[0].id,
+      }));
+    }
+  }, [formData.workspace, open, workspaces]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!formData.workspace) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
     // Generate a random color based on the workspace or default
     const selectedWorkspace = workspaces.find(w => w.id === formData.workspace);
     const color = selectedWorkspace?.color || `#${Math.floor(Math.random()*16777215).toString(16)}`;
-    
+
     const newProject = {
-      id: uuidv4(),
       name: formData.name,
       description: formData.description,
-      createdAt: new Date().toISOString(),
       dueDate: formData.dueDate ? formData.dueDate.toISOString() : undefined,
       status: "active" as const,
       progress: 0,
       members: [],
-      tasks: [],
       workspace: formData.workspace,
       favorite: false,
       color,
     };
-    
-    addProject(newProject);
-    setFormData({
-      name: "",
-      description: "",
-      workspace: "",
-      dueDate: null,
-    });
-    setOpen(false);
-    if (onSuccess) onSuccess();
+
+    try {
+      await addProject(newProject);
+      setFormData({
+        name: "",
+        description: "",
+        workspace: "",
+        dueDate: null,
+      });
+      setOpen(false);
+      onSuccess?.();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -182,7 +202,9 @@ const CreateProjectModal = ({
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit">Create Project</Button>
+            <Button type="submit" disabled={isSubmitting || workspaces.length === 0}>
+              {isSubmitting ? "Creating..." : "Create Project"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

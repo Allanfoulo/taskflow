@@ -8,6 +8,8 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProjectProvider } from "@/contexts/ProjectContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AIProvider } from "@/contexts/AIContext";
+import { ThemeProvider as ThesysThemeProvider } from "@thesysai/genui-sdk";
+import "@crayonai/react-ui/styles/index.css";
 
 // Layout
 import Layout from "@/components/layout/Layout";
@@ -42,36 +44,38 @@ const App = () => (
       <TooltipProvider>
         <AuthProvider>
           <ProjectProvider>
-            <AIProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <Routes>
-                  {/* Auth Routes */}
-                  <Route path="/auth/login" element={<Login />} />
-                  <Route path="/auth/signup" element={<Signup />} />
+            <ThesysThemeProvider mode="dark">
+              <AIProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <Routes>
+                    {/* Auth Routes */}
+                    <Route path="/auth/login" element={<Login />} />
+                    <Route path="/auth/signup" element={<Signup />} />
 
-                  {/* Main App Routes */}
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<Dashboard />} />
-                    <Route path="projects" element={<ProjectsList />} />
-                    <Route path="projects/:projectId" element={<ProjectDetail />} />
-                    <Route path="calendar" element={<Calendar />} />
-                    <Route path="tasks" element={<Tasks />} />
-                    <Route path="team" element={<Team />} />
-                    <Route path="integrations" element={<Integrations />} />
-                    <Route path="notifications" element={<NotificationsPage />} />
+                    {/* Main App Routes */}
+                    <Route path="/" element={<Layout />}>
+                      <Route index element={<Dashboard />} />
+                      <Route path="projects" element={<ProjectsList />} />
+                      <Route path="projects/:projectId" element={<ProjectDetail />} />
+                      <Route path="calendar" element={<Calendar />} />
+                      <Route path="tasks" element={<Tasks />} />
+                      <Route path="team" element={<Team />} />
+                      <Route path="integrations" element={<Integrations />} />
+                      <Route path="notifications" element={<NotificationsPage />} />
 
-                    {/* User Routes */}
-                    <Route path="profile" element={<Profile />} />
-                    <Route path="settings" element={<Settings />} />
-                    <Route path="settings/theme" element={<ThemeSettings />} />
+                      {/* User Routes */}
+                      <Route path="profile" element={<Profile />} />
+                      <Route path="settings" element={<Settings />} />
+                      <Route path="settings/theme" element={<ThemeSettings />} />
 
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
-              </BrowserRouter>
-            </AIProvider>
+                      <Route path="*" element={<NotFound />} />
+                    </Route>
+                  </Routes>
+                </BrowserRouter>
+              </AIProvider>
+            </ThesysThemeProvider>
           </ProjectProvider>
         </AuthProvider>
       </TooltipProvider>

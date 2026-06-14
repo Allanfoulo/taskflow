@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { supabase } from "@/lib/supabase";
-import { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { createContext, useContext, ReactNode, useEffect, useState } from "react";
+import { useAuthActions, useConvexAuth } from "@convex-dev/auth/react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 export type User = {
   id: string;
@@ -12,100 +13,85 @@ export type User = {
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  session: null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { signIn, signOut } = useAuthActions();
+  const convexUser = useQuery(api.users.current);
+  const ensureCurrentProfile = useMutation(api.profiles.ensureCurrentProfile);
+  const [userOverride, setUserOverride] = useState<User | null>(null);
 
   useEffect(() => {
-    // Check active sessions and sets the user
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session?.user) {
-        setUser(mapSupabaseUser(session.user));
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    };
+    if (isAuthenticated && convexUser) {
+      void ensureCurrentProfile({});
+    }
+  }, [convexUser, ensureCurrentProfile, isAuthenticated]);
 
-    getSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session?.user) {
-        setUser(mapSupabaseUser(session.user));
-      } else {
-        setUser(null);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const mapSupabaseUser = (authUser: SupabaseUser): User => {
-    return {
-      id: authUser.id,
-      name: authUser.user_metadata?.name || authUser.email?.split('@')[0] || "User",
-      email: authUser.email || "",
-      avatarUrl: authUser.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${authUser.email}`,
-      role: (authUser.user_metadata?.role as "admin" | "manager" | "member") || "member",
-    };
-  };
+  useEffect(() => {
+    if (convexUser) {
+      setUserOverride(convexUser);
+    } else if (!isAuthenticated) {
+      setUserOverride(null);
+    }
+  }, [convexUser, isAuthenticated]);
 
   const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    await signIn("password", {
+      flow: "signIn",
       email,
       password,
     });
-    if (error) throw error;
   };
 
   const signup = async (name: string, email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    await signIn("password", {
+      flow: "signUp",
+      name,
       email,
       password,
-      options: {
-        data: {
-          name,
-          role: "member", // Default role
-        },
-      },
     });
-    if (error) throw error;
   };
 
   const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setUser(null);
-    setSession(null);
+    await signOut();
+    setUserOverride(null);
   };
+
+  const updateUser = (updates: Partial<User>) => {
+    setUserOverride((currentUser) => {
+      if (currentUser === null) {
+        return null;
+      }
+      return { ...currentUser, ...updates };
+    });
+  };
+
+  const user = userOverride;
+  const loading = authLoading || (isAuthenticated && convexUser === undefined);
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        session,
-        isAuthenticated: !!session,
+        session: null,
+        isAuthenticated,
         isLoading: loading,
         login,
         signup,
         register: signup,
         logout,
+        updateUser,
       }}
     >
       {children}

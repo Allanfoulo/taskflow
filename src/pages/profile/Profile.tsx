@@ -1,8 +1,9 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import {
   Card,
   CardContent,
@@ -17,6 +18,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   UserRound,
   Mail,
   Briefcase,
@@ -26,12 +34,32 @@ import {
   Loader2
 } from "lucide-react";
 
+const JOB_TITLE_OPTIONS = [
+  "Founder",
+  "Product Manager",
+  "Project Manager",
+  "Designer",
+  "Developer",
+  "Marketing",
+  "Operations",
+  "Admin",
+  "Manager",
+  "Member",
+] as const;
+
+const CUSTOM_JOB_TITLE_VALUE = "__other__";
+
+const isPresetJobTitle = (value: string) =>
+  JOB_TITLE_OPTIONS.includes(value as (typeof JOB_TITLE_OPTIONS)[number]);
+
 const Profile = () => {
   const { user, updateUser } = useAuth();
+  const profile = useQuery(api.profiles.current);
+  const updateProfile = useMutation(api.profiles.updateCurrent);
   const [profileData, setProfileData] = useState({
     name: "",
     email: "",
-    role: "",
+    jobTitle: "",
     avatar: "",
     bio: "",
     location: "",
@@ -43,37 +71,21 @@ const Profile = () => {
 
   // Fetch profile data
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) return;
+    if (!user || !profile) return;
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
-      }
-
-      if (data) {
-        const newData = {
-          name: data.full_name || user.name || "",
-          email: user.email || "",
-          role: user.role || "",
-          avatar: data.avatar_url || user.avatarUrl || "",
-          bio: data.bio || "",
-          location: data.location || "",
-          joinDate: new Date(data.updated_at || new Date()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-        };
-        setProfileData(newData);
-        setFormData(newData);
-      }
+    const newData = {
+      name: profile.name || user.name || "",
+      email: profile.email || user.email || "",
+      jobTitle: profile.jobTitle || "",
+      avatar: profile.avatar || user.avatarUrl || "",
+      bio: profile.bio || "",
+      location: profile.location || "",
+      joinDate: profile.joinDate || "",
     };
 
-    fetchProfile();
-  }, [user]);
+    setProfileData(newData);
+    setFormData(newData);
+  }, [profile, user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -87,29 +99,44 @@ const Profile = () => {
     setHasChanges(hasAnyChanges);
   }, [formData, profileData]);
 
+  const selectedJobTitle = isPresetJobTitle(formData.jobTitle)
+    ? formData.jobTitle
+    : CUSTOM_JOB_TITLE_VALUE;
+
+  const handleJobTitleChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      jobTitle:
+        value === CUSTOM_JOB_TITLE_VALUE
+          ? (isPresetJobTitle(prev.jobTitle) ? "" : prev.jobTitle)
+          : value,
+    }));
+  };
+
   const handleSave = async () => {
     if (!hasChanges || !user) return;
+
+    if (selectedJobTitle === CUSTOM_JOB_TITLE_VALUE && formData.jobTitle.trim() === "") {
+      toast.error("Enter a custom job title or choose a preset option");
+      return;
+    }
 
     setIsLoading(true);
 
     try {
-      const updates = {
-        id: user.id,
-        full_name: formData.name,
-        avatar_url: formData.avatar,
+      await updateProfile({
+        name: formData.name,
+        jobTitle: formData.jobTitle.trim(),
+        avatar: formData.avatar,
         bio: formData.bio,
         location: formData.location,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from('profiles').upsert(updates);
-
-      if (error) throw error;
+      });
 
       setProfileData({ ...formData });
-
-      // Update local storage or context if needed
-      // Note: updateUser context method might need to be implemented or we rely on session
+      updateUser({
+        name: formData.name,
+        avatarUrl: formData.avatar,
+      });
 
       toast.success("Profile updated successfully");
       setHasChanges(false);
@@ -142,7 +169,7 @@ const Profile = () => {
             </Avatar>
             <div className="text-center">
               <h3 className="font-medium text-lg">{profileData.name}</h3>
-              <p className="text-sm text-muted-foreground">{profileData.role}</p>
+              <p className="text-sm text-muted-foreground">{profileData.jobTitle}</p>
             </div>
             <div className="w-full space-y-2">
               <div className="flex items-center text-sm">
@@ -151,7 +178,7 @@ const Profile = () => {
               </div>
               <div className="flex items-center text-sm">
                 <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
-                <span>{profileData.role}</span>
+                <span>{profileData.jobTitle}</span>
               </div>
               <div className="flex items-center text-sm">
                 <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -218,13 +245,29 @@ const Profile = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="role">Job Title</Label>
-                  <Input
-                    id="role"
-                    name="role"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                  />
+                  <Label htmlFor="jobTitle">Job Title</Label>
+                  <Select value={selectedJobTitle} onValueChange={handleJobTitleChange}>
+                    <SelectTrigger id="jobTitle">
+                      <SelectValue placeholder="Select a job title" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JOB_TITLE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CUSTOM_JOB_TITLE_VALUE}>Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {selectedJobTitle === CUSTOM_JOB_TITLE_VALUE && (
+                    <Input
+                      id="customJobTitle"
+                      name="jobTitle"
+                      placeholder="Enter your job title"
+                      value={formData.jobTitle}
+                      onChange={handleInputChange}
+                    />
+                  )}
                 </div>
               </div>
               <div className="space-y-2">

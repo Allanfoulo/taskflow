@@ -29,6 +29,7 @@ import {
 import { format } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
 import SmartInsights from "@/components/dashboard/SmartInsights";
+import CreateProjectModal from "@/components/projects/CreateProjectModal";
 
 // Mock data for charts
 const activityData = [
@@ -108,13 +109,14 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="mt-4 md:mt-0 animate-scale-in">
-          <Link
-            to="/projects/new"
-            className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-2xl hover:bg-primary/90 transition-all hover:scale-105 shadow-lg shadow-primary/20"
-          >
-            <Layers className="mr-2 h-4 w-4" />
-            New Project
-          </Link>
+          <CreateProjectModal
+            trigger={
+              <button className="inline-flex items-center px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-2xl hover:bg-primary/90 transition-all hover:scale-105 shadow-lg shadow-primary/20">
+                <Layers className="mr-2 h-4 w-4" />
+                New Project
+              </button>
+            }
+          />
         </div>
       </div>
 

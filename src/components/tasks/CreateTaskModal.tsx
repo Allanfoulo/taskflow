@@ -18,12 +18,21 @@ import { v4 as uuidv4 } from "uuid";
 interface CreateTaskModalProps {
   projectId: string;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-const CreateTaskModal = ({ projectId, trigger }: CreateTaskModalProps) => {
+const CreateTaskModal = ({
+  projectId,
+  trigger,
+  open: controlledOpen,
+  onOpenChange,
+  onSuccess,
+}: CreateTaskModalProps) => {
   const { addTask } = useProjects();
   const { generateContent } = useAI();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
@@ -32,6 +41,9 @@ const CreateTaskModal = ({ projectId, trigger }: CreateTaskModalProps) => {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
 
   const handleAIAutoBreakdown = async () => {
     if (!title) return;
@@ -71,30 +83,33 @@ const CreateTaskModal = ({ projectId, trigger }: CreateTaskModalProps) => {
     setSubtasks(subtasks.filter(t => t.id !== id));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    addTask({
-      id: uuidv4(),
-      title,
-      description,
-      priority,
-      status,
-      dueDate: dueDate ? dueDate.toISOString() : undefined,
-      createdAt: new Date().toISOString(),
-      tags: [],
-      subtasks: subtasks,
-      projectId,
-    });
+    try {
+      await addTask({
+        title,
+        description,
+        priority,
+        status,
+        dueDate: dueDate ? dueDate.toISOString() : undefined,
+        tags: [],
+        subtasks,
+        projectId,
+      });
 
-    // Reset form
-    setTitle("");
-    setDescription("");
-    setPriority("medium");
-    setStatus("todo");
-    setDueDate(undefined);
-    setSubtasks([]);
-    setOpen(false);
+      setTitle("");
+      setDescription("");
+      setPriority("medium");
+      setStatus("todo");
+      setDueDate(undefined);
+      setSubtasks([]);
+      setOpen(false);
+      onSuccess?.();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -240,7 +255,9 @@ const CreateTaskModal = ({ projectId, trigger }: CreateTaskModalProps) => {
           </div>
 
           <DialogFooter>
-            <Button type="submit">Create Task</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create Task"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

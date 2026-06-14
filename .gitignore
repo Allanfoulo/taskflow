@@ -28,5 +28,7 @@ dist-ssr
 
 # Environment and Logs
 .env
+.env.convex-auth
 build_log.txt
 vite.config.ts.timestamp-*
+supabase-export/

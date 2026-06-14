@@ -16,6 +16,13 @@ const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const handleForgotPassword = () => {
+    toast({
+      title: "Password reset not available yet",
+      description: "Password reset will be added after the Convex cutover is complete.",
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -37,23 +44,6 @@ const Login = () => {
       toast({
         title: "Authentication failed",
         description: "Please check your credentials and try again",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // For demo purposes, we'll provide a way to login with a demo account
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    try {
-      await login("demo@example.com", "password");
-      navigate("/");
-    } catch (error) {
-      toast({
-        title: "Demo login failed",
-        description: "Please try again",
         variant: "destructive",
       });
     } finally {
@@ -83,12 +73,13 @@ const Login = () => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
-            <Link
-              to="/auth/forgot-password"
+            <button
+              type="button"
               className="text-sm text-primary hover:underline"
+              onClick={handleForgotPassword}
             >
               Forgot password?
-            </Link>
+            </button>
           </div>
           <Input
             id="password"
@@ -107,25 +98,6 @@ const Login = () => {
           disabled={isLoading}
         >
           {isLoading ? "Signing in..." : "Sign in"}
-        </Button>
-
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-card px-2 text-muted-foreground">Or</span>
-          </div>
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={handleDemoLogin}
-          disabled={isLoading}
-        >
-          Continue with demo account
         </Button>
       </form>
 

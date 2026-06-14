@@ -38,7 +38,6 @@ import CreateTaskModal from "@/components/tasks/CreateTaskModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
-import { v4 as uuidv4 } from "uuid";
 
 interface TopBarProps {
   onToggleSidebar: () => void;
@@ -53,13 +52,14 @@ const TopBar = ({ onToggleSidebar }: TopBarProps) => {
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [newWorkspaceColor, setNewWorkspaceColor] = useState("#4f46e5");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
 
   const handleLogout = async () => {
     await logout();
     navigate("/auth/login");
   };
 
-  const handleCreateWorkspace = () => {
+  const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim()) {
       toast({
         title: "Workspace name required",
@@ -69,21 +69,19 @@ const TopBar = ({ onToggleSidebar }: TopBarProps) => {
       return;
     }
 
-    const newWorkspace = {
-      id: uuidv4(),
-      name: newWorkspaceName,
-      color: newWorkspaceColor,
-      createdAt: new Date().toISOString(),
-    };
+    const workspaceName = newWorkspaceName;
 
-    addWorkspace(newWorkspace);
+    await addWorkspace({
+      name: workspaceName,
+      color: newWorkspaceColor,
+    });
     setNewWorkspaceName("");
     setNewWorkspaceColor("#4f46e5");
     setIsCreateWorkspaceOpen(false);
 
     toast({
       title: "Workspace created",
-      description: `${newWorkspaceName} has been created successfully`,
+      description: `${workspaceName} has been created successfully`,
     });
   };
 
@@ -178,7 +176,10 @@ const TopBar = ({ onToggleSidebar }: TopBarProps) => {
                     {projects.map(project => (
                       <DropdownMenuItem
                         key={project.id}
-                        onClick={() => setSelectedProjectId(project.id)}
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          setIsCreateTaskOpen(true);
+                        }}
                         className="cursor-pointer"
                       >
                         <div className="flex items-center gap-2">
@@ -209,7 +210,16 @@ const TopBar = ({ onToggleSidebar }: TopBarProps) => {
               {selectedProjectId && (
                 <CreateTaskModal
                   projectId={selectedProjectId}
-                  trigger={<span className="hidden" />}
+                  open={isCreateTaskOpen}
+                  onOpenChange={(open) => {
+                    setIsCreateTaskOpen(open);
+                    if (!open) {
+                      setSelectedProjectId(null);
+                    }
+                  }}
+                  onSuccess={() => {
+                    setSelectedProjectId(null);
+                  }}
                 />
               )}
 
