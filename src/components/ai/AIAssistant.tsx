@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useAI } from "@/contexts/AIContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,32 @@ import {
     Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const normalizeMarkdownTables = (content: string) => {
+    const lines = content.split("\n");
+    const normalized: string[] = [];
+
+    for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const nextLine = lines[i + 1] ?? "";
+        const isTableHeader = line.trim().startsWith("|") && nextLine.trim().match(/^\|?[\s:-|]+\|?$/);
+
+        if (isTableHeader && normalized.length > 0 && normalized[normalized.length - 1].trim() !== "") {
+            normalized.push("");
+        }
+
+        normalized.push(line);
+
+        const currentLineLooksLikeTable = line.trim().startsWith("|");
+        const nextLineLooksLikeTable = nextLine.trim().startsWith("|");
+
+        if (currentLineLooksLikeTable && !nextLineLooksLikeTable && nextLine.trim() !== "") {
+            normalized.push("");
+        }
+    }
+
+    return normalized.join("\n");
+};
 
 const AIAssistant = () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -114,13 +141,46 @@ const AIAssistant = () => {
                         >
                             <div
                                 className={cn(
-                                    "p-3 rounded-2xl text-sm shadow-sm",
+                                    "p-3 rounded-2xl text-sm shadow-sm overflow-hidden",
                                     m.role === "user"
                                         ? "bg-primary text-primary-foreground rounded-tr-none"
                                         : "bg-secondary text-secondary-foreground rounded-tl-none border border-border"
                                 )}
                             >
-                                <ReactMarkdown>{m.content}</ReactMarkdown>
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                        p: ({ children }) => <p className="mb-3 last:mb-0 leading-6">{children}</p>,
+                                        ul: ({ children }) => <ul className="mb-3 list-disc pl-5 space-y-1">{children}</ul>,
+                                        ol: ({ children }) => <ol className="mb-3 list-decimal pl-5 space-y-1">{children}</ol>,
+                                        li: ({ children }) => <li className="leading-6">{children}</li>,
+                                        table: ({ children }) => (
+                                            <div className="mb-3 overflow-x-auto rounded-lg border border-border/70">
+                                                <table className="min-w-full border-collapse text-left text-xs">
+                                                    {children}
+                                                </table>
+                                            </div>
+                                        ),
+                                        thead: ({ children }) => <thead className="bg-background/40">{children}</thead>,
+                                        th: ({ children }) => (
+                                            <th className="border-b border-border/70 px-2 py-1.5 font-semibold align-top">
+                                                {children}
+                                            </th>
+                                        ),
+                                        td: ({ children }) => (
+                                            <td className="border-t border-border/50 px-2 py-1.5 align-top">
+                                                {children}
+                                            </td>
+                                        ),
+                                        code: ({ children }) => (
+                                            <code className="rounded bg-background/50 px-1 py-0.5 text-[0.85em]">
+                                                {children}
+                                            </code>
+                                        ),
+                                    }}
+                                >
+                                    {normalizeMarkdownTables(m.content)}
+                                </ReactMarkdown>
                             </div>
                         </div>
                     ))}

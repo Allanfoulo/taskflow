@@ -1,5 +1,5 @@
 
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Home,
@@ -24,8 +24,10 @@ interface SidebarProps {
 
 const Sidebar = ({ collapsed }: SidebarProps) => {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { workspaces, projects } = useProjects();
   const { user } = useAuth();
+  const selectedWorkspaceId = searchParams.get("workspace");
 
   const favoriteProjects = projects.filter((project) => project.favorite);
 
@@ -145,8 +147,13 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
                 {workspaces.map((workspace) => (
                   <li key={workspace.id}>
                     <Link
-                      to={`/workspace/${workspace.id}`}
-                      className="flex items-center px-3 py-2 text-sm rounded-md hover:bg-secondary/50 group transition-all"
+                      to={`/projects?workspace=${workspace.id}`}
+                      className={cn(
+                        "flex items-center px-3 py-2 text-sm rounded-md group transition-all",
+                        location.pathname === "/projects" && selectedWorkspaceId === workspace.id
+                          ? "bg-secondary text-primary"
+                          : "hover:bg-secondary/50",
+                      )}
                     >
                       <span
                         className="w-2 h-2 rounded-full mr-2"

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import {
   Bell,
+  Database,
   Moon,
   Sun,
   Monitor,
@@ -33,6 +34,7 @@ import {
   Save,
 } from "lucide-react";
 import { CollaborationSettings } from "@/components/collaboration";
+import { DemoDataPanel } from "@/components/user";
 
 const LANGUAGE_OPTIONS = [
   "English",
@@ -226,6 +228,15 @@ const Settings = () => {
             className="text-sm"
           >
             Billing
+          </Button>
+          <Button
+            variant={activeTab === "demoData" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("demoData")}
+            className="text-sm"
+          >
+            <Database className="mr-2 h-4 w-4" />
+            Demo Data
           </Button>
         </div>
 
@@ -486,6 +497,10 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {activeTab === "demoData" && (
+          <DemoDataPanel />
         )}
       </div>
     </div>

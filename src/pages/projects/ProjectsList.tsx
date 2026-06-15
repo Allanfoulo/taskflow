@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useProjects } from "@/contexts/ProjectContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,12 +42,18 @@ import {
 import { format, isAfter, parseISO, differenceInDays } from "date-fns";
 
 const ProjectsList = () => {
+  const [searchParams] = useSearchParams();
   const { projects, workspaces, toggleFavorite } = useProjects();
   const [filteredProjects, setFilteredProjects] = useState(projects);
   const [sortOption, setSortOption] = useState("favorite");
+  const selectedWorkspaceId = searchParams.get("workspace");
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
+  const visibleProjects = selectedWorkspaceId
+    ? filteredProjects.filter((project) => project.workspace === selectedWorkspaceId)
+    : filteredProjects;
 
   // Sort projects based on selected sort option
-  const sortedProjects = [...filteredProjects].sort((a, b) => {
+  const sortedProjects = [...visibleProjects].sort((a, b) => {
     switch (sortOption) {
       case "favorite":
         // First, sort by favorite status
@@ -117,7 +123,9 @@ const ProjectsList = () => {
         <div>
           <h1 className="text-3xl font-bold">Projects</h1>
           <p className="text-muted-foreground mt-1">
-            {projects.length} project{projects.length !== 1 && "s"} in total
+            {selectedWorkspace
+              ? `${selectedWorkspace.name}: ${visibleProjects.length} project${visibleProjects.length !== 1 && "s"}`
+              : `${projects.length} project${projects.length !== 1 && "s"} in total`}
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -131,7 +139,7 @@ const ProjectsList = () => {
 
       <div className="flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
-          {filteredProjects.length} project{filteredProjects.length !== 1 && "s"} found
+          {visibleProjects.length} project{visibleProjects.length !== 1 && "s"} found
         </div>
 
         <DropdownMenu>

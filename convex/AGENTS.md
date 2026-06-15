@@ -15,6 +15,7 @@
 
 - Prefer focused domain files over one large backend module.
 - Keep frontend-facing shapes close to existing app contracts when migrating from Supabase.
+- Keep reusable demo or migration dataset utilities in dedicated backend modules instead of mixing them into product CRUD files.
 
 ## Verification
 
