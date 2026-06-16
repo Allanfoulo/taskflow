@@ -23,6 +23,7 @@ import { useToast } from "@/components/ui/use-toast";
 import BoardView from "@/components/projects/BoardView";
 import ProjectDashboard from "@/components/projects/ProjectDashboard";
 import ProjectTimeline from "@/components/projects/ProjectTimeline";
+import ProjectSuggestionsPanel from "@/components/projects/ProjectSuggestionsPanel";
 import ProjectTags from "@/components/projects/ProjectTags";
 import TaskList from "@/components/tasks/TaskList";
 import CreateTaskModal from "@/components/tasks/CreateTaskModal";
@@ -352,7 +353,10 @@ const ProjectDetail = () => {
         </TabsList>
 
         <TabsContent value="dashboard" className="flex-1 mt-6">
-          <ProjectDashboard projectId={project.id} />
+          <div className="space-y-6">
+            <ProjectDashboard projectId={project.id} />
+            <ProjectSuggestionsPanel projectId={project.id} />
+          </div>
         </TabsContent>
 
         <TabsContent value="board" className="flex-1 mt-6">

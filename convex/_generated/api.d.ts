@@ -10,10 +10,12 @@
 
 import type * as activities from "../activities.js";
 import type * as auth from "../auth.js";
+import type * as calendarEvents from "../calendarEvents.js";
 import type * as datasets from "../datasets.js";
 import type * as http from "../http.js";
 import type * as migrations from "../migrations.js";
 import type * as profiles from "../profiles.js";
+import type * as projectSuggestions from "../projectSuggestions.js";
 import type * as projects from "../projects.js";
 import type * as tasks from "../tasks.js";
 import type * as users from "../users.js";
@@ -28,10 +30,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   activities: typeof activities;
   auth: typeof auth;
+  calendarEvents: typeof calendarEvents;
   datasets: typeof datasets;
   http: typeof http;
   migrations: typeof migrations;
   profiles: typeof profiles;
+  projectSuggestions: typeof projectSuggestions;
   projects: typeof projects;
   tasks: typeof tasks;
   users: typeof users;

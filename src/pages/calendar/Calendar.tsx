@@ -1,5 +1,6 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 // Tabs removed to fix rendering issues
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from "date-fns/format";
+import format from "date-fns/format";
 import { addDays } from "date-fns/addDays";
 import { startOfWeek } from "date-fns/startOfWeek";
 import { endOfWeek } from "date-fns/endOfWeek";
@@ -28,13 +29,20 @@ import { setHours } from "date-fns/setHours";
 import { setMinutes } from "date-fns/setMinutes";
 import { parseISO } from "date-fns/parseISO";
 import { Badge } from "@/components/ui/badge";
-import { CalendarClock, Users, Clock, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon } from "lucide-react";
+import { CalendarClock, Users, Clock, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, Link as LinkIcon } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
-import { v4 as uuidv4 } from "uuid";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useProjects } from "@/contexts/ProjectContext";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
-// Event type definition
+const DEFAULT_MANUAL_EVENT_COLOR = "#4f46e5";
+const DEFAULT_TASK_DUE_COLOR = "#f97316";
+const NO_PROJECT_VALUE = "__no_project__";
+
+type CalendarEventSource = "manual" | "projectDueDate" | "taskDueDate";
+
 interface CalendarEvent {
   id: string;
   title: string;
@@ -43,98 +51,149 @@ interface CalendarEvent {
   endDate: Date;
   attendees: string[];
   project: string;
+  projectId?: string;
   location?: string;
-  color?: string;
+  color: string;
+  source: CalendarEventSource;
+  sourceLabel: string;
+  isAllDay: boolean;
 }
 
-// Mock calendar events
-const mockEvents: CalendarEvent[] = [
-  {
-    id: "e1",
-    title: "Team Meeting",
-    description: "Weekly team sync to discuss project progress",
-    startDate: setHours(setMinutes(addDays(new Date(), 1), 0), 10),
-    endDate: setHours(setMinutes(addDays(new Date(), 1), 0), 11),
-    attendees: ["John Doe", "Jane Smith", "Mike Johnson"],
-    project: "Website Redesign",
-    location: "Conference Room A",
-    color: "#4f46e5"
-  },
-  {
-    id: "e2",
-    title: "Client Presentation",
-    description: "Present the new marketing strategy to the client",
-    startDate: setHours(setMinutes(addDays(new Date(), 2), 0), 14),
-    endDate: setHours(setMinutes(addDays(new Date(), 2), 30), 15),
-    attendees: ["John Doe", "Jane Smith", "Client Team"],
-    project: "Marketing Campaign",
-    location: "Main Conference Room",
-    color: "#0ea5e9"
-  },
-  {
-    id: "e3",
-    title: "Sprint Planning",
-    description: "Plan the next sprint tasks and priorities",
-    startDate: setHours(setMinutes(addDays(new Date(), 3), 0), 9),
-    endDate: setHours(setMinutes(addDays(new Date(), 3), 30), 10),
-    attendees: ["Development Team"],
-    project: "Mobile App Development",
-    location: "Dev Room",
-    color: "#10b981"
-  },
-  {
-    id: "e4",
-    title: "Design Review",
-    description: "Review the latest UI designs for the website",
-    startDate: setHours(setMinutes(addDays(new Date(), 5), 0), 11),
-    endDate: setHours(setMinutes(addDays(new Date(), 5), 0), 12),
-    attendees: ["Design Team", "Product Manager"],
-    project: "Website Redesign",
-    location: "Design Studio",
-    color: "#f59e0b"
-  },
-  {
-    id: "e5",
-    title: "Product Demo",
-    description: "Demonstrate the new features to stakeholders",
-    startDate: setHours(setMinutes(addDays(new Date(), 2), 0), 11),
-    endDate: setHours(setMinutes(addDays(new Date(), 2), 0), 12),
-    attendees: ["Product Team", "Stakeholders"],
-    project: "Mobile App Development",
-    location: "Demo Room",
-    color: "#8b5cf6"
-  },
-  {
-    id: "e6",
-    title: "Code Review",
-    description: "Review pull requests and discuss code quality",
-    startDate: setHours(setMinutes(addDays(new Date(), 4), 0), 15),
-    endDate: setHours(setMinutes(addDays(new Date(), 4), 0), 16),
-    attendees: ["Development Team"],
-    project: "Website Redesign",
-    location: "Virtual Meeting",
-    color: "#ec4899"
-  }
-];
+type NewEventFormState = {
+  title: string;
+  description: string;
+  startDate: Date;
+  endDate: Date;
+  attendees: string[];
+  projectId: string;
+  location: string;
+  color: string;
+};
 
-const Calendar = () => {
-  const [date, setDate] = useState<Date>(new Date());
-  const [view, setView] = useState<"month" | "week" | "day">("month");
-  const [events, setEvents] = useState<CalendarEvent[]>(mockEvents);
-  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
-  const [newEvent, setNewEvent] = useState<Partial<CalendarEvent>>({
+const createInitialEventState = (baseDate = new Date()): NewEventFormState => {
+  const startDate = setHours(setMinutes(baseDate, 0), 9);
+  const endDate = setHours(setMinutes(baseDate, 0), 10);
+
+  return {
     title: "",
     description: "",
-    startDate: new Date(),
-    endDate: new Date(),
+    startDate,
+    endDate,
     attendees: [],
-    project: "",
+    projectId: "",
     location: "",
-    color: "#4f46e5"
-  });
+    color: DEFAULT_MANUAL_EVENT_COLOR,
+  };
+};
+
+const parseCalendarDate = (value?: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsedDate = parseISO(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate;
+};
+
+const Calendar = () => {
+  const { projects } = useProjects();
+  const manualEventRecords = useQuery(api.calendarEvents.list);
+  const createCalendarEvent = useMutation(api.calendarEvents.create);
+  const [date, setDate] = useState<Date>(new Date());
+  const [view, setView] = useState<"month" | "week" | "day">("month");
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [newEvent, setNewEvent] = useState<NewEventFormState>(createInitialEventState());
   const [attendeeInput, setAttendeeInput] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
-  
+  const projectNameById = new Map(projects.map((project) => [project.id, project.name]));
+
+  const projectDueEvents: CalendarEvent[] = projects.flatMap((project) => {
+    const dueDate = parseCalendarDate(project.dueDate);
+    if (!dueDate) {
+      return [];
+    }
+
+    return [
+      {
+        id: `project-due-${project.id}`,
+        title: `${project.name} due`,
+        description: project.description,
+        startDate: startOfDay(dueDate),
+        endDate: endOfDay(dueDate),
+        attendees: project.members,
+        project: project.name,
+        projectId: project.id,
+        color: project.color || DEFAULT_MANUAL_EVENT_COLOR,
+        source: "projectDueDate",
+        sourceLabel: "Project due date",
+        isAllDay: true,
+      },
+    ];
+  });
+
+  const taskDueEvents: CalendarEvent[] = projects.flatMap((project) =>
+    project.tasks.flatMap((task) => {
+      const dueDate = parseCalendarDate(task.dueDate);
+      if (!dueDate) {
+        return [];
+      }
+
+      return [
+        {
+          id: `task-due-${task.id}`,
+          title: task.title,
+          description: task.description,
+          startDate: startOfDay(dueDate),
+          endDate: endOfDay(dueDate),
+          attendees: [],
+          project: project.name,
+          projectId: project.id,
+          color: DEFAULT_TASK_DUE_COLOR,
+          source: "taskDueDate",
+          sourceLabel: "Task due date",
+          isAllDay: true,
+        },
+      ];
+    }),
+  );
+
+  const manualEvents: CalendarEvent[] = (manualEventRecords || []).flatMap((event) => {
+    const startDate = parseCalendarDate(event.startDate);
+    const endDate = parseCalendarDate(event.endDate);
+    if (!startDate || !endDate) {
+      return [];
+    }
+
+    const projectId = event.projectId ? String(event.projectId) : undefined;
+
+    return [
+      {
+        id: String(event.id),
+        title: event.title,
+        description: event.description,
+        startDate,
+        endDate,
+        attendees: event.attendees,
+        project: projectId ? (projectNameById.get(projectId) || "Linked project") : "Standalone event",
+        projectId,
+        location: event.location,
+        color: event.color || DEFAULT_MANUAL_EVENT_COLOR,
+        source: "manual",
+        sourceLabel: "Manual event",
+        isAllDay: false,
+      },
+    ];
+  });
+
+  const events = [...manualEvents, ...projectDueEvents, ...taskDueEvents].sort(
+    (left, right) => left.startDate.getTime() - right.startDate.getTime(),
+  );
+
   // Handle navigation between weeks/months/days
   const navigatePrevious = () => {
     if (view === "month") {
@@ -162,17 +221,13 @@ const Calendar = () => {
   
   // Get events for different views
   const getEventsForDate = (day: Date) => {
-    return events.filter(event => 
-      isSameDay(event.startDate, day)
-    );
+    return events.filter((event) => isSameDay(event.startDate, day));
   };
   
   const getEventsForWeek = () => {
     const start = startOfWeek(date, { weekStartsOn: 0 });
     const end = endOfWeek(date, { weekStartsOn: 0 });
-    return events.filter(event => 
-      (event.startDate >= start && event.startDate <= end)
-    );
+    return events.filter((event) => event.startDate >= start && event.startDate <= end);
   };
   
   const getDaysOfWeek = () => {
@@ -182,7 +237,7 @@ const Calendar = () => {
   };
   
   // Handle event creation
-  const handleCreateEvent = () => {
+  const handleCreateEvent = async () => {
     if (!newEvent.title) {
       toast({
         title: "Event title required",
@@ -191,48 +246,48 @@ const Calendar = () => {
       });
       return;
     }
-    
-    if (!newEvent.project) {
+
+    if (newEvent.endDate < newEvent.startDate) {
       toast({
-        title: "Project required",
-        description: "Please select a project for your event",
+        title: "Invalid event time",
+        description: "End time must be after the start time",
         variant: "destructive",
       });
       return;
     }
-    
-    const createdEvent: CalendarEvent = {
-      id: uuidv4(),
-      title: newEvent.title || "",
-      description: newEvent.description,
-      startDate: newEvent.startDate || new Date(),
-      endDate: newEvent.endDate || new Date(),
-      attendees: newEvent.attendees || [],
-      project: newEvent.project || "",
-      location: newEvent.location,
-      color: newEvent.color || "#4f46e5"
-    };
-    
-    setEvents([...events, createdEvent]);
-    setIsCreateEventOpen(false);
-    
-    // Reset form
-    setNewEvent({
-      title: "",
-      description: "",
-      startDate: new Date(),
-      endDate: new Date(),
-      attendees: [],
-      project: "",
-      location: "",
-      color: "#4f46e5"
-    });
-    setAttendeeInput("");
-    
-    toast({
-      title: "Event created",
-      description: `${createdEvent.title} has been added to your calendar`,
-    });
+
+    setIsCreatingEvent(true);
+
+    try {
+      await createCalendarEvent({
+        title: newEvent.title,
+        description: newEvent.description || undefined,
+        startDate: newEvent.startDate.toISOString(),
+        endDate: newEvent.endDate.toISOString(),
+        attendees: newEvent.attendees,
+        projectId: newEvent.projectId ? (newEvent.projectId as Id<"projects">) : undefined,
+        location: newEvent.location || undefined,
+        color: newEvent.color || DEFAULT_MANUAL_EVENT_COLOR,
+      });
+
+      setIsCreateEventOpen(false);
+      setNewEvent(createInitialEventState());
+      setAttendeeInput("");
+
+      toast({
+        title: "Event created",
+        description: `${newEvent.title} has been added to your calendar`,
+      });
+    } catch (error) {
+      console.error("Failed to create calendar event", error);
+      toast({
+        title: "Unable to create event",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingEvent(false);
+    }
   };
   
   const addAttendee = () => {
@@ -250,6 +305,28 @@ const Calendar = () => {
       ...newEvent,
       attendees: newEvent.attendees?.filter(a => a !== attendee)
     });
+  };
+
+  const openCreateEventDialogForDay = (selectedDate: Date) => {
+    setNewEvent(createInitialEventState(selectedDate));
+    setAttendeeInput("");
+    setIsCreateEventOpen(true);
+  };
+
+  const formatEventTime = (event: CalendarEvent) => {
+    if (event.isAllDay) {
+      return "All day";
+    }
+
+    return `${format(event.startDate, "h:mm a")} - ${format(event.endDate, "h:mm a")}`;
+  };
+
+  const getMonthEventLabel = (event: CalendarEvent) => {
+    if (event.isAllDay) {
+      return event.source === "taskDueDate" ? `Task due: ${event.title}` : event.title;
+    }
+
+    return `${format(event.startDate, "h:mm a")} ${event.title}`;
   };
 
   return (
@@ -497,21 +574,31 @@ const Calendar = () => {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="eventProject">Project</Label>
+                  <Label htmlFor="eventProject">Linked Project</Label>
                   <Select
-                    value={newEvent.project}
-                    onValueChange={(value) => setNewEvent({ ...newEvent, project: value })}
+                    value={newEvent.projectId || NO_PROJECT_VALUE}
+                    onValueChange={(value) =>
+                      setNewEvent({
+                        ...newEvent,
+                        projectId: value === NO_PROJECT_VALUE ? "" : value,
+                      })
+                    }
                   >
                     <SelectTrigger id="eventProject">
                       <SelectValue placeholder="Select a project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Website Redesign">Website Redesign</SelectItem>
-                      <SelectItem value="Mobile App Development">Mobile App Development</SelectItem>
-                      <SelectItem value="Marketing Campaign">Marketing Campaign</SelectItem>
-                      <SelectItem value="Content Strategy">Content Strategy</SelectItem>
+                      <SelectItem value={NO_PROJECT_VALUE}>No linked project</SelectItem>
+                      {projects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Link the event to a project when it belongs to planned work. Leave it standalone for meetings or reminders.
+                  </p>
                 </div>
                 
                 <div className="space-y-2">
@@ -573,8 +660,8 @@ const Calendar = () => {
                 <Button variant="outline" onClick={() => setIsCreateEventOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleCreateEvent}>
-                  Create Event
+                <Button onClick={() => void handleCreateEvent()} disabled={isCreatingEvent}>
+                  {isCreatingEvent ? "Creating..." : "Create Event"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -620,7 +707,7 @@ const Calendar = () => {
                           className="text-xs truncate rounded px-1 py-0.5"
                           style={{ backgroundColor: `${event.color}20`, color: event.color }}
                         >
-                          {format(event.startDate, 'h:mm a')} {event.title}
+                          {getMonthEventLabel(event)}
                         </div>
                       ))}
                       {dayEvents.length > 3 && (
@@ -677,9 +764,10 @@ const Calendar = () => {
                           className="text-sm p-2 mb-1 rounded truncate"
                           style={{ backgroundColor: `${event.color}20`, color: event.color, borderLeft: `3px solid ${event.color}` }}
                         >
-                          <div className="font-medium">{event.title}</div>
-                          <div className="text-xs">
-                            {format(event.startDate, 'h:mm a')} - {format(event.endDate, 'h:mm a')}
+                          <div className="font-medium truncate">{event.title}</div>
+                          <div className="text-xs flex items-center gap-2">
+                            <span>{formatEventTime(event)}</span>
+                            <span className="opacity-80">{event.sourceLabel}</span>
                           </div>
                         </div>
                       ))}
@@ -703,7 +791,11 @@ const Calendar = () => {
                 <CalendarComponent
                   mode="single"
                   selected={date}
-                  onSelect={setDate}
+                  onSelect={(selectedDate) => {
+                    if (selectedDate) {
+                      setDate(selectedDate);
+                    }
+                  }}
                   className="rounded-md border"
                 />
               </CardContent>
@@ -725,8 +817,13 @@ const Calendar = () => {
                         style={{ borderLeft: `4px solid ${event.color}` }}
                       >
                         <div className="flex justify-between items-start">
-                          <h3 className="font-medium text-lg">{event.title}</h3>
-                          <Badge variant="outline">{event.project}</Badge>
+                          <div className="space-y-2">
+                            <h3 className="font-medium text-lg">{event.title}</h3>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge variant="secondary">{event.sourceLabel}</Badge>
+                              <Badge variant="outline">{event.project}</Badge>
+                            </div>
+                          </div>
                         </div>
                         {event.description && (
                           <p className="text-sm text-muted-foreground mt-1">{event.description}</p>
@@ -734,7 +831,7 @@ const Calendar = () => {
                         <div className="mt-2 flex flex-col space-y-2">
                           <div className="flex items-center text-sm text-muted-foreground">
                             <Clock className="mr-2 h-4 w-4" />
-                            {format(event.startDate, 'h:mm a')} - {format(event.endDate, 'h:mm a')}
+                            {formatEventTime(event)}
                           </div>
                           {event.location && (
                             <div className="flex items-center text-sm text-muted-foreground">
@@ -742,10 +839,18 @@ const Calendar = () => {
                               {event.location}
                             </div>
                           )}
-                          <div className="flex items-center text-sm text-muted-foreground">
-                            <Users className="mr-2 h-4 w-4" />
-                            {event.attendees.join(', ')}
-                          </div>
+                          {event.projectId && (
+                            <div className="flex items-center text-sm text-muted-foreground">
+                              <LinkIcon className="mr-2 h-4 w-4" />
+                              Linked to {event.project}
+                            </div>
+                          )}
+                          {event.attendees.length > 0 && (
+                            <div className="flex items-center text-sm text-muted-foreground">
+                              <Users className="mr-2 h-4 w-4" />
+                              {event.attendees.join(", ")}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -757,14 +862,7 @@ const Calendar = () => {
                     <Button
                       variant="outline"
                       className="mt-4"
-                      onClick={() => {
-                        setNewEvent({
-                          ...newEvent,
-                          startDate: setHours(setMinutes(date, 0), 9),
-                          endDate: setHours(setMinutes(date, 0), 10),
-                        });
-                        setIsCreateEventOpen(true);
-                      }}
+                      onClick={() => openCreateEventDialogForDay(date)}
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Event

@@ -40,6 +40,13 @@ const metadataValidator = v.object({
   taskId: v.optional(v.string()),
 });
 
+const projectSuggestionStatusValidator = v.union(
+  v.literal("new"),
+  v.literal("saved"),
+  v.literal("dismissed"),
+  v.literal("applied"),
+);
+
 export default defineSchema({
   ...authTables,
   profiles: defineTable({
@@ -105,6 +112,29 @@ export default defineSchema({
     .index("ownerId", ["ownerId"])
     .index("projectId", ["projectId"])
     .index("legacySupabaseId", ["legacySupabaseId"]),
+  calendarEvents: defineTable({
+    ownerId: v.id("users"),
+    title: v.string(),
+    description: v.optional(v.string()),
+    startDate: v.string(),
+    endDate: v.string(),
+    attendees: v.array(v.string()),
+    projectId: v.optional(v.id("projects")),
+    location: v.optional(v.string()),
+    color: v.string(),
+  })
+    .index("by_ownerId_and_startDate", ["ownerId", "startDate"])
+    .index("by_ownerId_and_projectId", ["ownerId", "projectId"]),
+  projectSuggestions: defineTable({
+    ownerId: v.id("users"),
+    projectId: v.id("projects"),
+    source: v.union(v.literal("autopilot"), v.literal("manual")),
+    status: projectSuggestionStatusValidator,
+    content: v.string(),
+    createdByUserId: v.optional(v.id("users")),
+  })
+    .index("by_ownerId_and_projectId", ["ownerId", "projectId"])
+    .index("by_ownerId_and_projectId_and_status", ["ownerId", "projectId", "status"]),
   activities: defineTable({
     legacySupabaseId: v.optional(v.string()),
     userId: v.id("users"),

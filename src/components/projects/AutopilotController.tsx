@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
+import { useMutation } from "convex/react";
 import { useAI } from "@/contexts/AIContext";
 import { useProjects } from "@/contexts/ProjectContext";
 import { useToast } from "@/components/ui/use-toast";
-import { Sparkles, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
 interface AutopilotControllerProps {
     projectId: string;
@@ -15,8 +18,9 @@ interface AutopilotControllerProps {
 
 const AutopilotController: React.FC<AutopilotControllerProps> = ({ projectId, isActive, onDeactivate }) => {
     const { generateContent } = useAI();
-    const { projects, updateProject } = useProjects();
+    const { projects } = useProjects();
     const { toast } = useToast();
+    const createSuggestion = useMutation(api.projectSuggestions.create);
     const [status, setStatus] = useState<string>("Initializing...");
     const [lastAction, setLastAction] = useState<string | null>(null);
 
@@ -46,10 +50,16 @@ const AutopilotController: React.FC<AutopilotControllerProps> = ({ projectId, is
                     const prompt = `Given a project named "${project.name}" with status "${project.status}" and ${project.tasks.length} tasks, generate a short, one-sentence proactive suggestion for the project manager. Avoid generic advice.`;
                     const suggestion = await generateContent(prompt);
                     if (suggestion) {
-                        setLastAction(suggestion.trim());
+                        const normalizedSuggestion = suggestion.trim();
+                        setLastAction(normalizedSuggestion);
+                        await createSuggestion({
+                            projectId: projectId as Id<"projects">,
+                            source: "autopilot",
+                            content: normalizedSuggestion,
+                        });
                         toast({
                             title: "Autopilot Suggestion",
-                            description: suggestion.trim(),
+                            description: normalizedSuggestion,
                             duration: 5000,
                         });
                     }
