@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useAI } from "@/contexts/AIContext";
@@ -9,12 +10,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Bot,
     Send,
-    X,
     Minus,
     Sparkles,
-    MessageSquare,
-    ChevronDown,
-    Trash2
+    Plus,
+    History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +46,15 @@ const normalizeMarkdownTables = (content: string) => {
 const AIAssistant = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState("");
-    const { messages, sendMessage, isThinking, clearHistory } = useAI();
+    const {
+        messages,
+        conversations,
+        activeConversationId,
+        sendMessage,
+        isThinking,
+        startNewConversation,
+        selectConversation,
+    } = useAI();
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -90,14 +97,57 @@ const AIAssistant = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={clearHistory} className="h-8 w-8 text-muted-foreground hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void startNewConversation()}
+                        className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    >
+                        <Plus className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="h-8 w-8">
                         <Minus className="h-4 w-4" />
                     </Button>
                 </div>
             </CardHeader>
+
+            <div className="border-b bg-background/40 px-4 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        <History className="h-3.5 w-3.5" />
+                        Recent chats
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => void startNewConversation()}
+                    >
+                        <Plus className="mr-1 h-3.5 w-3.5" />
+                        New chat
+                    </Button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                    {conversations.map((conversation) => (
+                        <button
+                            key={conversation.id}
+                            onClick={() => selectConversation(conversation.id)}
+                            className={cn(
+                                "min-w-[148px] rounded-xl border px-3 py-2 text-left transition-colors",
+                                activeConversationId === conversation.id
+                                    ? "border-primary bg-primary/10"
+                                    : "border-border bg-background hover:bg-muted/60",
+                            )}
+                        >
+                            <div className="truncate text-xs font-medium">{conversation.title}</div>
+                            <div className="mt-1 text-[10px] text-muted-foreground">
+                                {formatDistanceToNow(new Date(conversation.lastActivityAt), { addSuffix: true })}
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
 
             <ScrollArea className="flex-1 p-4 overflow-y-auto" ref={scrollRef}>
                 <div className="space-y-4">

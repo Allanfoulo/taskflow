@@ -9,6 +9,7 @@
  */
 
 import type * as activities from "../activities.js";
+import type * as aiConversations from "../aiConversations.js";
 import type * as auth from "../auth.js";
 import type * as calendarEvents from "../calendarEvents.js";
 import type * as datasets from "../datasets.js";
@@ -29,6 +30,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activities: typeof activities;
+  aiConversations: typeof aiConversations;
   auth: typeof auth;
   calendarEvents: typeof calendarEvents;
   datasets: typeof datasets;

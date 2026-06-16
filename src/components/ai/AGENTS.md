@@ -10,6 +10,7 @@
 
 - Keep AI UI concerns here instead of leaking them into generic shared primitives.
 - The assistant UI renders markdown replies from `AIContext`; preserve support for GitHub-flavored Markdown because agent responses may include lists and tables.
+- The assistant UI also surfaces global conversation history from `AIContext`; keep chat switching and new-chat controls in this domain instead of pushing them into generic layout components.
 
 ## Work Guidance
 

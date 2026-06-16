@@ -47,6 +47,33 @@ const projectSuggestionStatusValidator = v.union(
   v.literal("applied"),
 );
 
+const aiDraftTaskValidator = v.object({
+  title: v.string(),
+  description: v.string(),
+  status: v.union(
+    v.literal("backlog"),
+    v.literal("todo"),
+    v.literal("inProgress"),
+    v.literal("inReview"),
+    v.literal("done"),
+  ),
+  priority: v.union(
+    v.literal("low"),
+    v.literal("medium"),
+    v.literal("high"),
+    v.literal("urgent"),
+  ),
+  dueDate: v.optional(v.string()),
+});
+
+const pendingAiDraftValidator = v.object({
+  projectName: v.string(),
+  description: v.string(),
+  workspaceId: v.string(),
+  dueDate: v.optional(v.string()),
+  tasks: v.array(aiDraftTaskValidator),
+});
+
 export default defineSchema({
   ...authTables,
   profiles: defineTable({
@@ -135,6 +162,21 @@ export default defineSchema({
   })
     .index("by_ownerId_and_projectId", ["ownerId", "projectId"])
     .index("by_ownerId_and_projectId_and_status", ["ownerId", "projectId", "status"]),
+  aiConversations: defineTable({
+    ownerId: v.id("users"),
+    title: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    pendingDraft: v.union(pendingAiDraftValidator, v.null()),
+    lastActivityAt: v.number(),
+  })
+    .index("by_ownerId_and_lastActivityAt", ["ownerId", "lastActivityAt"])
+    .index("by_ownerId_and_status", ["ownerId", "status"]),
+  aiMessages: defineTable({
+    ownerId: v.id("users"),
+    conversationId: v.id("aiConversations"),
+    role: v.union(v.literal("user"), v.literal("model")),
+    content: v.string(),
+  }).index("by_conversationId", ["conversationId"]),
   activities: defineTable({
     legacySupabaseId: v.optional(v.string()),
     userId: v.id("users"),

@@ -1,8 +1,12 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { GoogleGenAI } from "@google/genai";
+import { Id } from "../../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { useProjects } from "@/contexts/ProjectContext";
 
-interface Message {
+export interface Message {
     role: "user" | "model";
     content: string;
 }
@@ -21,6 +25,14 @@ type PendingProjectDraft = {
     workspaceId: string;
     dueDate?: string;
     tasks: DraftTask[];
+};
+
+type AIConversation = {
+    id: string;
+    title: string;
+    status: "active" | "archived";
+    pendingDraft: PendingProjectDraft | null;
+    lastActivityAt: string;
 };
 
 type AIModelResponse = {
@@ -43,11 +55,14 @@ type AIModelResponse = {
 
 interface AIContextType {
     messages: Message[];
+    conversations: AIConversation[];
+    activeConversationId: string | null;
     sendMessage: (message: string) => Promise<void>;
     generateContent: (prompt: string) => Promise<string>;
     isThinking: boolean;
     error: string | null;
-    clearHistory: () => void;
+    startNewConversation: () => Promise<void>;
+    selectConversation: (conversationId: string) => void;
 }
 
 const AIContext = createContext<AIContextType | undefined>(undefined);
@@ -57,13 +72,6 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
 const CONFIRMATION_MESSAGES = new Set(["confirm", "confirm create", "yes, create it"]);
 const TASK_STATUSES: DraftTask["status"][] = ["backlog", "todo", "inProgress", "inReview", "done"];
 const TASK_PRIORITIES: DraftTask["priority"][] = ["low", "medium", "high", "urgent"];
-
-const appendModelMessage = (
-    setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
-    content: string,
-) => {
-    setMessages((prev) => [...prev, { role: "model", content }]);
-};
 
 const isConfirmationMessage = (content: string) =>
     CONFIRMATION_MESSAGES.has(content.trim().toLowerCase());
@@ -148,12 +156,56 @@ const normalizeDraft = (
     };
 };
 
+const buildConversationTitle = (content: string) => {
+    const collapsed = content.replace(/\s+/g, " ").trim();
+    if (!collapsed) {
+        return "New chat";
+    }
+
+    return collapsed.length > 48 ? `${collapsed.slice(0, 45).trimEnd()}...` : collapsed;
+};
+
 export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const { user } = useAuth();
+    const { projects, workspaces, addProject, addTask } = useProjects();
     const [isThinking, setIsThinking] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [pendingDraft, setPendingDraft] = useState<PendingProjectDraft | null>(null);
-    const { projects, workspaces, addProject, addTask } = useProjects();
+    const [requestedInitialConversation, setRequestedInitialConversation] = useState(false);
+
+    const conversationRecords = useQuery(api.aiConversations.listConversations);
+    const messageRecords = useQuery(api.aiConversations.listMessages, {
+        conversationId: activeConversationId ? (activeConversationId as Id<"aiConversations">) : undefined,
+    });
+    const createConversation = useMutation(api.aiConversations.createConversation);
+    const appendConversationMessage = useMutation(api.aiConversations.appendMessage);
+    const updateConversationTitle = useMutation(api.aiConversations.updateConversationTitle);
+    const updateConversationPendingDraft = useMutation(api.aiConversations.updatePendingDraft);
+
+    const conversations = useMemo<AIConversation[]>(
+        () => (conversationRecords || []).map((conversation) => ({
+            id: String(conversation.id),
+            title: conversation.title,
+            status: conversation.status,
+            pendingDraft: conversation.pendingDraft,
+            lastActivityAt: conversation.lastActivityAt,
+        })),
+        [conversationRecords],
+    );
+
+    const messages = useMemo<Message[]>(
+        () => (messageRecords || []).map((message) => ({
+            role: message.role,
+            content: message.content,
+        })),
+        [messageRecords],
+    );
+
+    const activeConversation = useMemo(
+        () => conversations.find((conversation) => conversation.id === activeConversationId) || null,
+        [activeConversationId, conversations],
+    );
 
     const retryWithBackoff = async <T,>(
         fn: () => Promise<T>,
@@ -164,15 +216,15 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         while (true) {
             try {
                 return await fn();
-            } catch (error: any) {
+            } catch (retryError: any) {
                 const isTransient =
-                    error?.error?.code === 503 ||
-                    error?.error?.code === 429 ||
-                    error?.status === "UNAVAILABLE" ||
-                    (error?.message && (error.message.includes("503") || error.message.includes("429")));
+                    retryError?.error?.code === 503 ||
+                    retryError?.error?.code === 429 ||
+                    retryError?.status === "UNAVAILABLE" ||
+                    (retryError?.message && (retryError.message.includes("503") || retryError.message.includes("429")));
 
                 if (!isTransient || retries >= maxRetries) {
-                    throw error;
+                    throw retryError;
                 }
 
                 const delay = initialDelay * Math.pow(2, retries);
@@ -225,16 +277,88 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         return `\n\n[USER DATA - LIVE FROM DATABASE]\nAvailable workspaces:\n${JSON.stringify(workspaceSummaries, null, 2)}\nThe user has ${projects.length} project(s). Here is the full data:\n${JSON.stringify(projectSummaries, null, 2)}`;
     };
 
-    const handleConfirmedCreation = async () => {
+    const appendStoredMessage = async (
+        conversationId: string,
+        role: Message["role"],
+        content: string,
+    ) => {
+        await appendConversationMessage({
+            conversationId: conversationId as Id<"aiConversations">,
+            role,
+            content,
+        });
+    };
+
+    const persistPendingDraft = async (
+        conversationId: string,
+        draft: PendingProjectDraft | null,
+    ) => {
+        await updateConversationPendingDraft({
+            conversationId: conversationId as Id<"aiConversations">,
+            pendingDraft: draft,
+        });
+    };
+
+    const createAndActivateConversation = async () => {
+        const createdConversationId = await createConversation({});
+        const nextConversationId = String(createdConversationId);
+        setActiveConversationId(nextConversationId);
+        setPendingDraft(null);
+        setError(null);
+        return nextConversationId;
+    };
+
+    const ensureActiveConversation = async () => {
+        if (activeConversationId) {
+            return activeConversationId;
+        }
+
+        return await createAndActivateConversation();
+    };
+
+    useEffect(() => {
+        if (!user) {
+            setActiveConversationId(null);
+            setPendingDraft(null);
+            setRequestedInitialConversation(false);
+            return;
+        }
+
+        if (conversationRecords === undefined) {
+            return;
+        }
+
+        if (activeConversationId && conversations.some((conversation) => conversation.id === activeConversationId)) {
+            return;
+        }
+
+        if (conversations.length > 0) {
+            setActiveConversationId(conversations[0].id);
+            setRequestedInitialConversation(false);
+            return;
+        }
+
+        if (!requestedInitialConversation) {
+            setRequestedInitialConversation(true);
+            void createAndActivateConversation();
+        }
+    }, [activeConversationId, conversationRecords, conversations, requestedInitialConversation, user]);
+
+    useEffect(() => {
+        setPendingDraft(activeConversation?.pendingDraft || null);
+    }, [activeConversation]);
+
+    const handleConfirmedCreation = async (conversationId: string) => {
         if (!pendingDraft) {
-            appendModelMessage(setMessages, "There is no pending project draft to create yet.");
+            await appendStoredMessage(conversationId, "model", "There is no pending project draft to create yet.");
             return;
         }
 
         const workspace = workspaces.find((item) => item.id === pendingDraft.workspaceId);
         if (!workspace) {
             setPendingDraft(null);
-            appendModelMessage(setMessages, "The selected workspace is no longer available, so I cleared the pending draft. Please try again.");
+            await persistPendingDraft(conversationId, null);
+            await appendStoredMessage(conversationId, "model", "The selected workspace is no longer available, so I cleared the pending draft. Please try again.");
             return;
         }
 
@@ -249,7 +373,8 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
         if (!projectId) {
             setPendingDraft(null);
-            appendModelMessage(setMessages, `I couldn't create **${pendingDraft.projectName}** in **${workspace.name}**. No tasks were created.`);
+            await persistPendingDraft(conversationId, null);
+            await appendStoredMessage(conversationId, "model", `I couldn't create **${pendingDraft.projectName}** in **${workspace.name}**. No tasks were created.`);
             return;
         }
 
@@ -276,31 +401,50 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         }
 
         setPendingDraft(null);
+        await persistPendingDraft(conversationId, null);
 
         if (failedTasks === 0) {
-            appendModelMessage(
-                setMessages,
+            await appendStoredMessage(
+                conversationId,
+                "model",
                 `Created **${pendingDraft.projectName}** in **${workspace.name}** with ${createdTasks} task${createdTasks !== 1 ? "s" : ""}.`,
             );
             return;
         }
 
-        appendModelMessage(
-            setMessages,
+        await appendStoredMessage(
+            conversationId,
+            "model",
             `Created **${pendingDraft.projectName}** in **${workspace.name}**, but only ${createdTasks} task${createdTasks !== 1 ? "s" : ""} succeeded and ${failedTasks} failed.`,
         );
     };
 
     const sendMessage = async (content: string) => {
-        setError(null);
-        const newUserMessage: Message = { role: "user", content };
-        const newHistory = [...messages, newUserMessage];
-        setMessages(newHistory);
+        const trimmedContent = content.trim();
+        if (!trimmedContent) {
+            return;
+        }
 
-        if (isConfirmationMessage(content)) {
+        setError(null);
+
+        const conversationId = await ensureActiveConversation();
+        const currentMessages = messageRecords || [];
+        const currentTitle = activeConversation?.title || "New chat";
+        const newUserMessage: Message = { role: "user", content: trimmedContent };
+
+        await appendStoredMessage(conversationId, "user", trimmedContent);
+
+        if (currentMessages.length === 0 && currentTitle === "New chat") {
+            await updateConversationTitle({
+                conversationId: conversationId as Id<"aiConversations">,
+                title: buildConversationTitle(trimmedContent),
+            });
+        }
+
+        if (isConfirmationMessage(trimmedContent)) {
             setIsThinking(true);
             try {
-                await handleConfirmedCreation();
+                await handleConfirmedCreation(conversationId);
             } finally {
                 setIsThinking(false);
             }
@@ -308,17 +452,22 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         }
 
         if (!API_KEY) {
-            setError("Gemini API key is missing. Please add VITE_GEMINI_API_KEY to your .env file.");
+            const missingKeyMessage = "Gemini API key is missing. Please add VITE_GEMINI_API_KEY to your .env file.";
+            setError(missingKeyMessage);
+            await appendStoredMessage(conversationId, "model", missingKeyMessage);
             return;
         }
 
         try {
             setIsThinking(true);
 
-            const formattedHistory = newHistory.map((message) => ({
+            const formattedHistory = [...currentMessages.map((message) => ({
                 role: message.role,
                 parts: [{ text: message.content }],
-            }));
+            })), {
+                role: newUserMessage.role,
+                parts: [{ text: newUserMessage.content }],
+            }];
 
             const projectContext = buildProjectContext();
 
@@ -377,25 +526,26 @@ ${projectContext}`,
 
             const parsed = parseAIResponse(responseText);
             if (!parsed) {
-                appendModelMessage(setMessages, responseText);
+                await appendStoredMessage(conversationId, "model", responseText);
                 return;
             }
 
             if (parsed.type === "create_project_plan") {
                 const normalizedDraft = normalizeDraft(parsed.draft, workspaces.map((workspace) => workspace.id));
                 if (!normalizedDraft) {
-                    appendModelMessage(
-                        setMessages,
-                        parsed.message || "I need a little more detail before I can prepare a project draft.",
-                    );
+                    const fallbackMessage =
+                        parsed.message || "I need a little more detail before I can prepare a project draft.";
+                    await appendStoredMessage(conversationId, "model", fallbackMessage);
                     return;
                 }
 
                 const workspace = workspaces.find((item) => item.id === normalizedDraft.workspaceId);
                 const replacedExisting = pendingDraft !== null;
                 setPendingDraft(normalizedDraft);
-                appendModelMessage(
-                    setMessages,
+                await persistPendingDraft(conversationId, normalizedDraft);
+                await appendStoredMessage(
+                    conversationId,
+                    "model",
                     formatDraftSummary(
                         normalizedDraft,
                         workspace?.name || "Selected workspace",
@@ -406,17 +556,17 @@ ${projectContext}`,
                 return;
             }
 
-            appendModelMessage(setMessages, parsed.message || responseText);
-        } catch (err: any) {
-            console.error("Error sending message to Gemini:", err);
-            const errorMsg = err?.message?.includes("429")
+            await appendStoredMessage(conversationId, "model", parsed.message || responseText);
+        } catch (sendError: any) {
+            console.error("Error sending message to Gemini:", sendError);
+            const errorMsg = sendError?.message?.includes("429")
                 ? "Rate limit reached. Please wait a moment and try again."
-                : err?.message?.includes("503")
+                : sendError?.message?.includes("503")
                     ? "AI service is temporarily busy. Please try again shortly."
                     : "Something went wrong while generating a response. Please try again.";
 
             setError(errorMsg);
-            appendModelMessage(setMessages, `Warning: ${errorMsg}`);
+            await appendStoredMessage(conversationId, "model", `Warning: ${errorMsg}`);
         } finally {
             setIsThinking(false);
         }
@@ -440,14 +590,29 @@ ${projectContext}`,
         }
     };
 
-    const clearHistory = () => {
-        setMessages([]);
+    const startNewConversation = async () => {
+        await createAndActivateConversation();
+    };
+
+    const selectConversation = (conversationId: string) => {
+        setActiveConversationId(conversationId);
         setError(null);
-        setPendingDraft(null);
     };
 
     return (
-        <AIContext.Provider value={{ messages, sendMessage, generateContent, isThinking, error, clearHistory }}>
+        <AIContext.Provider
+            value={{
+                messages,
+                conversations,
+                activeConversationId,
+                sendMessage,
+                generateContent,
+                isThinking,
+                error,
+                startNewConversation,
+                selectConversation,
+            }}
+        >
             {children}
         </AIContext.Provider>
     );
