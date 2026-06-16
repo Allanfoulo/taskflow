@@ -9,10 +9,12 @@
 ## Local Contracts
 
 - Keep AI UI concerns here instead of leaking them into generic shared primitives.
+- The assistant UI renders markdown replies from `AIContext`; preserve support for GitHub-flavored Markdown because agent responses may include lists and tables.
 
 ## Work Guidance
 
 - Preserve clear boundaries between AI interaction UI and underlying provider logic from `src/contexts`.
+- Do not let the component layer decide when writes occur; approval and execution rules live in `AIContext`.
 
 ## Verification
 

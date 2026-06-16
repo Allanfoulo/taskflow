@@ -71,16 +71,20 @@ export type Workspace = {
   color: string;
 };
 
+type MutationOptions = {
+  suppressToast?: boolean;
+};
+
 // Create the context and provider
 interface ProjectContextType {
   projects: Project[];
   workspaces: Workspace[];
   currentProject: Project | null;
   setCurrentProject: (project: Project | null) => void;
-  addProject: (project: Partial<Project>) => Promise<void>;
+  addProject: (project: Partial<Project>, options?: MutationOptions) => Promise<string | null>;
   updateProject: (id: string, project: Partial<Project>) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
-  addTask: (task: Partial<Task>) => Promise<void>;
+  addTask: (task: Partial<Task>, options?: MutationOptions) => Promise<string | null>;
   updateTask: (id: string, task: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
@@ -166,8 +170,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addProject = async (project: Partial<Project>) => {
-    if (!user) return;
+  const addProject = async (project: Partial<Project>, options?: MutationOptions) => {
+    if (!user) return null;
 
     try {
       const workspaceId = (project.workspace || workspaces[0]?.id) as Id<"workspaces"> | undefined;
@@ -195,10 +199,16 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         entityId: String(createdProjectId),
         entityName: project.name || "New Project",
       });
-      toast.success("Project created successfully");
+      if (!options?.suppressToast) {
+        toast.success("Project created successfully");
+      }
+      return String(createdProjectId);
     } catch (error) {
       console.error("Error creating project:", error);
-      toast.error("Failed to create project");
+      if (!options?.suppressToast) {
+        toast.error("Failed to create project");
+      }
+      return null;
     }
   };
 
@@ -260,8 +270,8 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const addTask = async (task: Partial<Task>) => {
-    if (!task.projectId || !user) return;
+  const addTask = async (task: Partial<Task>, options?: MutationOptions) => {
+    if (!task.projectId || !user) return null;
 
     try {
       const createdTaskId = await createTask({
@@ -284,10 +294,16 @@ export const ProjectProvider = ({ children }: { children: ReactNode }) => {
         metadata: { projectId: task.projectId },
       });
 
-      toast.success("Task added");
+      if (!options?.suppressToast) {
+        toast.success("Task added");
+      }
+      return String(createdTaskId);
     } catch (error) {
       console.error("Error adding task:", error);
-      toast.error("Failed to add task");
+      if (!options?.suppressToast) {
+        toast.error("Failed to add task");
+      }
+      return null;
     }
   };
 

@@ -9,6 +9,7 @@
 ## Local Contracts
 
 - Route orchestration lives here; reusable project feature UI belongs in `src/components/projects`.
+- `ProjectsList` owns the route-level workspace filter driven by the `workspace` search parameter.
 
 ## Work Guidance
 

@@ -13,6 +13,7 @@
 ## Work Guidance
 
 - Avoid feature-specific business logic here unless it is necessary for shell orchestration.
+- Workspace links in the sidebar route to the existing Projects screen with a workspace query parameter instead of a standalone workspace page.
 
 ## Verification
 
