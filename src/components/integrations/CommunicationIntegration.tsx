@@ -35,7 +35,7 @@ const CommunicationIntegration = ({ className }: CommunicationIntegrationProps) 
       id: "1",
       name: "Slack",
       provider: "slack",
-      workspace: "TaskFlow Team",
+      workspace: "CLX Team",
       connected: true,
       lastSync: "2025-04-03T06:30:00Z",
       channels: ["#general", "#project-updates", "#development"],

@@ -184,7 +184,7 @@ const NotificationSystem = ({ className }: NotificationSystemProps) => {
       id: "system-update",
       type: "system",
       title: "System Update",
-      message: "TaskFlow has been updated with new features! Check out the collaboration tools.",
+      message: "CLX has been updated with new features! Check out the collaboration tools.",
       read: false,
       timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 minutes ago
       link: "/whats-new"

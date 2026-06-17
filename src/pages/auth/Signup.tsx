@@ -36,7 +36,7 @@ const Signup = () => {
       navigate("/");
       toast({
         title: "Account created",
-        description: "Welcome to TaskFlow!",
+        description: "Welcome to CLX!",
       });
     } catch (error) {
       toast({
@@ -52,7 +52,7 @@ const Signup = () => {
   return (
     <AuthLayout
       title="Create an account"
-      subtitle="Sign up to get started with TaskFlow"
+      subtitle="Sign up to get started with CLX"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">

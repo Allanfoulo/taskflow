@@ -538,7 +538,7 @@ const EmailNotificationSystem = ({ className }: EmailNotificationSystemProps) =>
                 <h3 className="font-medium">Sample Task Assignment Email</h3>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">Subject: [TaskFlow] New task assigned to you</p>
+                <p className="text-sm font-medium">Subject: [CLX] New task assigned to you</p>
                 <div className="bg-muted p-4 rounded-md">
                   <p className="text-sm">Hi John,</p>
                   <p className="text-sm mt-2">You have been assigned a new task:</p>
@@ -547,7 +547,7 @@ const EmailNotificationSystem = ({ className }: EmailNotificationSystemProps) =>
                   <p className="text-sm">Due date: April 10, 2025</p>
                   <p className="text-sm">Priority: High</p>
                   <div className="mt-4 border-t pt-2">
-                    <p className="text-sm">View this task in TaskFlow:</p>
+                    <p className="text-sm">View this task in CLX:</p>
                     <p className="text-sm text-blue-500 underline">https://taskflow.com/tasks/123</p>
                   </div>
                 </div>
@@ -557,7 +557,7 @@ const EmailNotificationSystem = ({ className }: EmailNotificationSystemProps) =>
                 <h3 className="font-medium">Sample Comment Notification Email</h3>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">Subject: [TaskFlow] New comment on "Implement user authentication"</p>
+                <p className="text-sm font-medium">Subject: [CLX] New comment on "Implement user authentication"</p>
                 <div className="bg-muted p-4 rounded-md">
                   <p className="text-sm">Hi John,</p>
                   <p className="text-sm mt-2">Jane Smith commented on a task you're following:</p>
@@ -575,7 +575,7 @@ const EmailNotificationSystem = ({ className }: EmailNotificationSystemProps) =>
                 <h3 className="font-medium">Sample Daily Digest Email</h3>
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium">Subject: [TaskFlow] Your Daily Digest - April 3, 2025</p>
+                <p className="text-sm font-medium">Subject: [CLX] Your Daily Digest - April 3, 2025</p>
                 <div className="bg-muted p-4 rounded-md">
                   <p className="text-sm">Hi John,</p>
                   <p className="text-sm mt-2">Here's your daily summary:</p>

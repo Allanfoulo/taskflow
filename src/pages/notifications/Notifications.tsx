@@ -74,7 +74,7 @@ const NotificationsPage = () => {
         {
           id: "1",
           type: "system" as NotificationType,
-          title: "Welcome to TaskFlow",
+          title: "Welcome to CLX",
           message: "Thanks for joining! Start by creating your first project.",
           read: false,
           timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),

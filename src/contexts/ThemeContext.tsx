@@ -77,7 +77,7 @@ const defaultDarkTheme: CustomTheme = {
 };
 
 const defaultBranding: BrandingOptions = {
-  companyName: "TaskFlow",
+  companyName: "CLX",
   logoUrl: "/logo.svg",
   favicon: "/favicon.ico",
   accentColor: "#0ea5e9"

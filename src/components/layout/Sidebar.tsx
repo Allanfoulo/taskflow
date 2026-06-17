@@ -106,7 +106,7 @@ const Sidebar = ({ collapsed }: SidebarProps) => {
               >
                 <path d="M12 2L2 12 12 22 22 12 12 2z" />
               </svg>
-              TaskFlow
+              CLX
             </span>
           )}
         </Link>

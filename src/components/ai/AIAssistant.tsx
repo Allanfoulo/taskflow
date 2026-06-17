@@ -89,7 +89,7 @@ const AIAssistant = () => {
                         <Bot className="h-5 w-5 text-primary-foreground" />
                     </div>
                     <div>
-                        <CardTitle className="text-sm font-bold">TaskFlow Agent</CardTitle>
+                        <CardTitle className="text-sm font-bold">CLX Agent</CardTitle>
                         <div className="flex items-center gap-1">
                             <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                             <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider">Online</span>

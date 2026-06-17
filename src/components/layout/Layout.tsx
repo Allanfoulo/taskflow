@@ -91,7 +91,7 @@ const Layout = () => {
             </div>
           </main>
           <footer className="border-t bg-background p-2 sm:p-4 text-center text-xs sm:text-sm text-muted-foreground">
-            <p>TaskFlow &copy; {new Date().getFullYear()} - Project Management Made Simple</p>
+            <p>CLX &copy; {new Date().getFullYear()} - Clarity Layer for Execution</p>
           </footer>
         </div>
       </div>

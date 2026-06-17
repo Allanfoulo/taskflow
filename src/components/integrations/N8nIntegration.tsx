@@ -66,7 +66,7 @@ const N8nIntegration = ({ className }: N8nIntegrationProps) => {
                     n8n Workflow Automation
                 </CardTitle>
                 <CardDescription>
-                    Connect TaskFlow to thousands of apps using n8n via webhooks.
+                    Connect CLX to thousands of apps using n8n via webhooks.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -167,7 +167,7 @@ const N8nIntegration = ({ className }: N8nIntegrationProps) => {
                         <div>
                             <h4 className="text-sm font-semibold text-orange-800">Why use n8n?</h4>
                             <p className="text-xs text-orange-700 mt-1">
-                                n8n allows you to build complex automation flows visually. Connect TaskFlow events to:
+                                n8n allows you to build complex automation flows visually. Connect CLX events to:
                             </p>
                             <ul className="text-xs text-orange-700 mt-2 list-disc list-inside">
                                 <li>Send Slack/Teams notifications</li>

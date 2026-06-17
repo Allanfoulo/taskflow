@@ -1,6 +1,6 @@
-# TaskFlow - AI-Enhanced Project Management
+# CLX - AI-Enhanced Project Management
 
-TaskFlow is a project management application built with React, Vite, Tailwind CSS, Convex, and Convex Auth. It combines standard project and task workflows with an embedded AI assistant that can summarize live data and draft real project creation plans for approval.
+CLX (Clarity Layer for Execution) is a project management application built with React, Vite, Tailwind CSS, Convex, and Convex Auth. It combines standard project and task workflows with an embedded AI assistant that can summarize live data and draft real project creation plans for approval.
 
 ## Key Features
 
@@ -9,7 +9,7 @@ TaskFlow is a project management application built with React, Vite, Tailwind CS
 - Sidebar workspace links open the existing Projects screen filtered to the selected workspace.
 - Profile and account settings are stored through Convex-backed user preferences.
 
-### TaskFlow Agent
+### CLX Agent
 - Live summaries: the agent can answer questions using the current project/task data from the database.
 - Markdown chat rendering: assistant replies support GitHub-flavored Markdown, including lists and tables.
 - Draft-before-write creation: the agent can draft a new project and task plan from natural language, then waits for an explicit `confirm` before creating anything.
@@ -60,7 +60,7 @@ Open the app at [http://localhost:8083](http://localhost:8083). If you run Vite 
 
 ## AI Agent Create Flow
 
-The embedded TaskFlow Agent can now draft real project creation from natural language.
+The embedded CLX Agent can now draft real project creation from natural language.
 
 Example:
 
@@ -130,4 +130,4 @@ The application is responsive, with a collapsible desktop sidebar and a mobile n
 
 ---
 
-Built by the TaskFlow team
+Built by the CLX team

@@ -474,7 +474,7 @@ export const AIProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
             const response = await retryWithBackoff(() => ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 config: {
-                    systemInstruction: `You are the TaskFlow Agent, a professional AI assistant for project management.
+                    systemInstruction: `You are the CLX Agent, a professional AI assistant for project management.
 
 You have real-time access to the user's project data from their database. Use this data to answer questions accurately.
 

@@ -423,7 +423,7 @@ const Settings = () => {
             <CardHeader>
               <CardTitle>Appearance</CardTitle>
               <CardDescription>
-                Customize how TaskFlow looks on your device
+                Customize how CLX looks on your device
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
