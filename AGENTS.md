@@ -12,11 +12,11 @@
 
 ## Repository Profile
 
-- This repository is a Vite + React + TypeScript frontend for project management workflows.
+- This repository is the CLX (Clarity Layer for Execution) Vite + React + TypeScript app for project and execution workflows.
 - Runtime app data and auth are backed by Convex and Convex Auth.
-- The embedded CLX Agent uses Gemini for conversational AI and can draft project/task creation plans that require explicit user confirmation before writes.
+- The embedded CLX Agent uses Gemini for conversational AI, supports persistent conversation history, and can draft project/task creation plans that require explicit user confirmation before writes.
 - The app code lives under `src`; static assets live under `public`.
-- `.agent` stores local agent skills and guidance artifacts. Treat it as tooling/support material, not runtime app code.
+- `.agents` stores local agent skills and guidance artifacts. Treat it as tooling/support material, not runtime app code.
 - `scripts` contains lightweight repository utilities such as verification helpers.
 
 ## Read Before Editing
@@ -61,7 +61,7 @@ Update parent or child docs when the structural change crosses their scope. Remo
 
 ## Child DOX Index
 
-- `.agent/AGENTS.md`: local AI skill assets and non-runtime agent guidance.
+- `.agents/AGENTS.md`: local AI skill assets and non-runtime agent guidance.
 - `convex/AGENTS.md`: Convex backend functions, schema, auth, and migration helpers.
 - `public/AGENTS.md`: static assets shipped by the frontend.
 - `scripts/AGENTS.md`: repository utility scripts, including DOX verification helpers.
